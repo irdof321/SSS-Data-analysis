@@ -1,0 +1,135 @@
+---
+title: "list_of_column"
+output: html_document
+---
+
+| id               | ok |
+|------------------|----|
+| submitdate       | ok |
+| lastpage         |    |
+| startlanguage    |    |
+| seed             |    |
+| startdate        |    |
+| datestamp        |    |
+| dmgender         | ok |
+| dmbirth          | ok |
+| dmswiss          | ok |
+| dmnatio          | ok |
+| dmres            | ok |
+| dmwork           | ok |
+| sssknow          | ok |
+| sssmember        | ok |
+| sssmember.other. | -  |
+| ssstime          | ok |
+| trlvl            |    |
+| trlvl.other.     |    |
+| tryear           |    |
+| trcontswiss      |    |
+| trreg            |    |
+| trarea.1.        |    |
+| trarea.2.        |    |
+| trarea.3.        |    |
+| trarea.4.        |    |
+| trarea.5.        |    |
+| trarea.6.        |    |
+| trarea.7.        |    |
+| trarea.8.        |    |
+| trarea.9.        |    |
+| trarea.10.       |    |
+| trarea.11.       |    |
+| trarea.12.       |    |
+| trarea.13.       |    |
+| trarea.14.       |    |
+| trarea.15.       |    |
+| trarea.16.       |    |
+| trarea.17.       |    |
+| trarea.18.       |    |
+| trarea.19.       |    |
+| trarea.other.    |    |
+| trcont.1.        |    |
+| trcont.2.        |    |
+| trcont.3.        |    |
+| trcont.4.        |    |
+| trcont.5.        |    |
+| trcont.6.        |    |
+| trcont.7.        |    |
+| trcont.other.    |    |
+| trcont2          |    |
+| trcont2.other.   |    |
+| plemployed       |    |
+| plstatus         |    |
+| plstatus.other.  |    |
+| plrole           |    |
+| plsector         |    |
+| plyexp           |    |
+| plrate           |    |
+| plsenior         |    |
+| plsenior.other.  |    |
+| plskill.1.       |    |
+| plskill.2.       |    |
+| plskill.3.       |    |
+| plskill.4.       |    |
+| plskill.5.       |    |
+| plskill.6.       |    |
+| plskill.other.   |    |
+| ustime.1..1.     |    |
+| ustime.1..2.     |    |
+| ustime.2..1.     |    |
+| ustime.2..2.     |    |
+| ustime.3..1.     |    |
+| ustime.3..2.     |    |
+| ustime.4..1.     |    |
+| ustime.4..2.     |    |
+| ustime.5..1.     |    |
+| ustime.5..2.     |    |
+| ustime.6..1.     |    |
+| ustime.6..2.     |    |
+| issalary         |    |
+| issatisf         |    |
+| issatisf2.1.     |    |
+| issatisf2.2.     |    |
+| issatisf2.3.     |    |
+| issatisf2.4.     |    |
+| issatisf2.5.     |    |
+| issatisf2.6.     |    |
+| issatisf2.7.     |    |
+| issatisf2.8.     |    |
+| issatisf2.9.     |    |
+| issatisf2.10.    |    |
+| issatisf2.11.    |    |
+| issatisf2.12.    |    |
+| interviewtime    |    |
+| groupTime652     |    |
+| dmgenderTime     |    |
+| dmbirthTime      |    |
+| dmswissTime      |    |
+| dmnatioTime      |    |
+| dmresTime        |    |
+| dmworkTime       |    |
+| groupTime653     |    |
+| sssknowTime      |    |
+| sssmemberTime    |    |
+| ssstimeTime      |    |
+| groupTime654     |    |
+| trlvlTime        |    |
+| tryearTime       |    |
+| trcontswissTime  |    |
+| trregTime        |    |
+| trareaTime       |    |
+| trcontTime       |    |
+| trcont2Time      |    |
+| groupTime657     |    |
+| plemployedTime   |    |
+| plstatusTime     |    |
+| plroleTime       |    |
+| plsectorTime     |    |
+| plyexpTime       |    |
+| plrateTime       |    |
+| plseniorTime     |    |
+| plskillTime      |    |
+| groupTime663     |    |
+| ustimeTime       |    |
+| groupTime658     |    |
+| issalaryTime     |    |
+| issatisfTime     |    |
+| issatisf2Time    |    |

@@ -21,8 +21,8 @@ output: html_document
 | sssmember        | ok |
 | sssmember.other. | -  |
 | ssstime          | ok |
-| trlvl            |    |
-| trlvl.other.     |    |
+| trlvl            | ok |
+| trlvl.other.     |  ? |
 | tryear           |    |
 | trcontswiss      |    |
 | trreg            |    |

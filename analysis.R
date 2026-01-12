@@ -16,24 +16,25 @@ REMOVE_NOT_SUB = FALSE # remove rows without a submitted date
 ####################################################################
 #   Preliminaries
 ####################################################################
-data <- read.csv(data_file, header = TRUE, sep=";")
+raw_data <- read.csv(data_file, header = TRUE, sep=";")
+clean_data <- raw_data[ , 0, drop = FALSE]
 
 ## Convert data into usable variables
 
 ### DATES
 
-data$submitdate = as.Date(data$submitdate)
-data$datestamp = as.Date(data$datestamp)
-data$startdate = as.Date(data$startdate)
+clean_data$submitdate = as.Date(raw_data$submitdate)
+clean_data$datestamp = as.Date(raw_data$datestamp)
+clean_data$startdate = as.Date(raw_data$startdate)
 
 ### NUMERICS
 
-data$dmbirth = strtoi(data$dmbirth)
-data$tryear = strtoi(data$tryear)
+clean_data$dmbirth = strtoi(raw_data$dmbirth)
+clean_data$tryear = strtoi(raw_data$tryear)
 
 ### LOGICALS
 
-data$sssknow <- as.logical(data$sssknow)
+clean_data$sssknow <- as.logical(raw_data$sssknow)
 
 ### FACTORS
 
@@ -76,14 +77,14 @@ origin_from_swiss <- function(dmswiss, dmnatio) {
 #### gender
 gender_levels <- c("Man", "Woman", "Other", "Prefer not to say")
 
-data$dmgender <- factor(
-  gender_levels[as.integer(data$dmgender)],
+clean_data$dmgender <- factor(
+  gender_levels[as.integer(raw_data$dmgender)],
   levels = gender_levels
 )
 
 #### origin
 
-data$origin <- origin_from_swiss(data$dmswiss, data$dmnatio)
+clean_data$origin <- origin_from_swiss(raw_data$dmswiss, raw_data$dmnatio)
 
 #### residency
 residency_levels <- c(
@@ -115,11 +116,11 @@ residency_levels <- c(
                       "ZG",
                       "ZH"
                       )
-data$dmres <- factor(residency_levels[as.integer(data$dmres)], levels = residency_levels)
+clean_data$dmres <- factor(residency_levels[as.integer(raw_data$dmres)], levels = residency_levels)
 
 #### work location
 residency_levels <- c(residency_levels, "I do not work")
-data$dmwork <- factor(residency_levels[as.integer(data$dmwork)], levels = residency_levels)
+clean_data$dmwork <- factor(residency_levels[as.integer(raw_data$dmwork)], levels = residency_levels)
 
 #### sss involvement
 involvement_level <- c(
@@ -129,7 +130,18 @@ involvement_level <- c(
                         "Active",
                         "Volunteer"
                       )
-data$sssmember <- factor(involvement_level[as.integer(data$sssmember)],levels = involvement_level)
+clean_data$sssmember <- factor(involvement_level[as.integer(raw_data$sssmember)],levels = involvement_level)
+
+
+#### sss time
+time_sss_level <- c(
+                    "Less than one year",
+                    "Less than five years",
+                    "Less than ten years",
+                    "Ten years or more"
+                  )
+
+clean_data$ssstime <- factor(time_sss_level[as.integer(raw_data$ssstime)], levels = time_sss_level)
 
 #### Education
 
@@ -142,34 +154,97 @@ education_level <- c(
                       "Other"
                     )
 
-data$trlvl <- factor(education_level[as.integer(data$trlvl)], levels = education_level)
-data$study_location <- origin_from_swiss(data$trcontswiss,data$trreg)
+clean_data$trlvl <- factor(education_level[as.integer(raw_data$trlvl)], levels = education_level)
+clean_data$study_location <- origin_from_swiss(raw_data$trcontswiss,raw_data$trreg)
 
-#### training field
+#### Training field
 
 training_field_study <- c(
-                          "Theology",
-                          "Law",
-                          "Science of economics",
-                          "Health, sport",
-                          "Psychology",
-                          "Sociology",
-                          "Other social sciences",
-                          "Language, literature",
-                          "History, civilizations study",
-                          "Art, music, design",
-                          "Mathematics",
-                          "Informatics / Computer science",
-                          "Statistics"
-                        )
+  "Theology",
+  "Law",
+  "Science of economics",
+  "Health, sport",
+  "Psychology",
+  "Sociology",
+  "Other social sciences",
+  "Language, literature",
+  "History, civilizations study",
+  "Art, music, design",
+  "Mathematics",
+  "Informatics / Computer science",
+  "Statistics",
+  "Data science",
+  "Applied statistics",
+  "Natural science, environmental science",
+  "Technical science, engineering",
+  "Education",
+  "Other"
+)
+
+
+cols <- paste0("trarea.", 1:19, ".")
+
+to_int01 <- function(x) {
+  if (is.factor(x)) x <- as.character(x)
+  x <- suppressWarnings(as.integer(x))
+  x[is.na(x) | !(x %in% c(0L, 1L))] <- 0L
+  x
+}
+
+# Clean -> 0/1 bitmap (n x 19)
+training_fields_bitmap <- as.matrix(data.frame(lapply(raw_data[, cols, drop = FALSE], to_int01)))
+storage.mode(training_fields_bitmap) <- "integer"
+
+# Free-text "Other" column (adjust name if needed)
+other_col <- "trarea.other"   # <-- change to your real column name
+other_text <- trimws(as.character(raw_data[[other_col]]))
+other_text[is.na(other_text) | other_text == ""] <- NA_character_
+
+# List-column (vector per row)
+clean_data$training_fields_list <- lapply(seq_len(nrow(training_fields_bitmap)), function(i) {
+  r <- training_fields_bitmap[i, ]
+  sel <- training_field_study[r == 1L]
+  
+  # if "Other" selected (bit 19), append the free text (if available)
+  if (r[19] == 1L && !is.na(other_text[i])) {
+    sel <- c(sel, other_text[i])
+  }
+  
+  sel
+})
+
+#### Continuous education
+
+continuous_education_levels <- c(
+                                  "No",
+                                  "MAS, DAS, CAS",
+                                  "Certified online training (Coursera, Edx, etc.)",
+                                  "Postgraduate in Business/Finance (MBA, EMBA, etc.)",
+                                  "Post-Doc",
+                                  "Further training with an employer"
+                                )
+
+# Columns trcont.1. ... trcont.6.
+cont_cols <- paste0("trcont.", 1:6, ".")
+
+# Clean -> 0/1 matrix (n x 6)
+cont_bitmap <- as.matrix(data.frame(lapply(raw_data[, cont_cols, drop = FALSE], to_int01)))
+storage.mode(cont_bitmap) <- "integer"
+
+# If row is empty (all zeros), assume "No" => force trcont.1. = 1
+empty_row <- rowSums(cont_bitmap) == 0L
+cont_bitmap[empty_row, 1] <- 1L
+
+# Optional: derive the selected label (NA if multiple selected)
+clean_data$continuous_education <- apply(cont_bitmap, 1, function(r) {
+  idx <- which(r == 1L)
+  if (length(idx) == 1) continuous_education_levels[idx] else NA_character_
+})
+
+# Derived boolean: trcont2. = TRUE if any option 2..6 is selected, else FALSE
+clean_data$trcont2 <- rowSums(cont_bitmap[, 2:6, drop = FALSE]) > 0L
 
 ####################################################################
 #   Study variables
 ####################################################################
 
-# 1. demographics data
-
-
-# table of current year - date of birth where there is an input
-ages <- strtoi(strftime(Sys.Date(),"%Y")) - subset(data$dmbirth, ! is.na(data$dmbirth))
-hist(ages,breaks=100)

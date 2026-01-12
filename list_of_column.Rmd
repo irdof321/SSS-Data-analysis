@@ -22,40 +22,40 @@ output: html_document
 | sssmember.other. | -  |
 | ssstime          | ok |
 | trlvl            | ok |
-| trlvl.other.     |  ? |
-| tryear           |    |
-| trcontswiss      |    |
-| trreg            |    |
-| trarea.1.        |    |
-| trarea.2.        |    |
-| trarea.3.        |    |
-| trarea.4.        |    |
-| trarea.5.        |    |
-| trarea.6.        |    |
-| trarea.7.        |    |
-| trarea.8.        |    |
-| trarea.9.        |    |
-| trarea.10.       |    |
-| trarea.11.       |    |
-| trarea.12.       |    |
-| trarea.13.       |    |
-| trarea.14.       |    |
-| trarea.15.       |    |
-| trarea.16.       |    |
-| trarea.17.       |    |
-| trarea.18.       |    |
-| trarea.19.       |    |
-| trarea.other.    |    |
-| trcont.1.        |    |
-| trcont.2.        |    |
-| trcont.3.        |    |
-| trcont.4.        |    |
-| trcont.5.        |    |
-| trcont.6.        |    |
-| trcont.7.        |    |
-| trcont.other.    |    |
-| trcont2          |    |
-| trcont2.other.   |    |
+| trlvl.other.     | ok |
+| tryear           | ok |
+| trcontswiss      | ok |
+| trreg            | ok |
+| trarea.1.        | ok |
+| trarea.2.        | ok |
+| trarea.3.        | ok |
+| trarea.4.        | ok |
+| trarea.5.        | ok |
+| trarea.6.        | ok |
+| trarea.7.        | ok |
+| trarea.8.        | ok |
+| trarea.9.        | ok |
+| trarea.10.       | ok |
+| trarea.11.       | ok |
+| trarea.12.       | ok |
+| trarea.13.       | ok |
+| trarea.14.       | ok |
+| trarea.15.       | ok |
+| trarea.16.       | ok |
+| trarea.17.       | ok |
+| trarea.18.       | ok |
+| trarea.19.       | ok |
+| trarea.other.    | ok |
+| trcont.1.        | ok |
+| trcont.2.        | ok |
+| trcont.3.        | ok |
+| trcont.4.        | ok |
+| trcont.5.        | ok |
+| trcont.6.        | ok |
+| trcont.7.        | ok |
+| trcont.other.    | ok |
+| trcont2          | ok |
+| trcont2.other.   | ok |
 | plemployed       |    |
 | plstatus         |    |
 | plstatus.other.  |    |

@@ -56,16 +56,16 @@ output: html_document
 | trcont.other.    | ok |
 | trcont2          | ok |
 | trcont2.other.   | ok |
-| plemployed       |    |
-| plstatus         |    |
-| plstatus.other.  |    |
-| plrole           |    |
-| plsector         |    |
-| plyexp           |    |
-| plrate           |    |
-| plsenior         |    |
+| plemployed       |  ok|
+| plstatus         |ok  |
+| plstatus.other.  | ok |
+| plrole           |ok  |
+| plsector         | ok |
+| plyexp           | ok |
+| plrate           |ok  |
+| plsenior         |  ok
 | plsenior.other.  |    |
-| plskill.1.       |    |
+| plskill.1.       |ok  |
 | plskill.2.       |    |
 | plskill.3.       |    |
 | plskill.4.       |    |

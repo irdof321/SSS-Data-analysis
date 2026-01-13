@@ -244,6 +244,125 @@ clean_data$continuous_education <- apply(cont_bitmap, 1, function(r) {
 # Derived boolean: trcont2. = TRUE if any option 2..6 is selected, else FALSE
 clean_data$trcont2 <- rowSums(cont_bitmap[, 2:6, drop = FALSE]) > 0L
 
+#### Employed
+clean_data$employed <- as.logical(raw_data$plemployed)
+
+#### Employ status
+
+employment_status_level <- c(
+                              "Employed",
+                              "Self-employed",
+                              "Student",
+                              "Unemployed",
+                              "Retired"
+                            )
+
+clean_data$job_status <- ifelse(
+  raw_data$plemployed == 1,
+  "Employed",
+  employment_status_level[ raw_data$plstatus - 1 ]  # 2->1, 3->2, ..., 5->4
+)
+
+#### job title
+# 1) plrole to string
+raw_data$plrole <- as.character(raw_data$plrole)
+
+# 2) Job role creation, but if student previously keep it
+clean_data$job_role <- ifelse(
+  clean_data$job_status == "Student",
+  "Student",
+  raw_data$plrole
+)
+
+# Cleaaning
+clean_data$job_role <- trimws(clean_data$job_role)
+clean_data$job_role[clean_data$job_role == ""] <- NA
+
+#### Sector
+
+sector_job_level <- c(
+  "Banking / Finance / Insurance",
+  "Luxury goods",
+  "IT/ Telecommunicatins industry",
+  "Consumer goods",
+  "Audit/ Consulting/ Professional service",
+  "Automotive",
+  "Aviation/ Aerospace/ Defense",
+  "Chemicals/ Ingredients",
+  "Electrical / Electronics / Semiconductors",
+  "Government / Public administration",
+  "Machinery and Equipment / Automation",
+  "Materials",
+  "Pharmaceuticals",
+  "Real estate",
+  "Transportation/ Rail",
+  "Watchmaking",
+  "Biotechnology/ Bioengineering",
+  "Construction/ Civil engineering",
+  "Engineering consulting",
+  "Hospital/ Healthcare",
+  "Logistics/ Suplly chain industry",
+  "Media / Advertising / Communication",
+  "Medical technologies and devices",
+  "Nonprofit organization / Social",
+  "Oil and gas / Energy",
+  "Primary or Secondary Education",
+  "Architecture / Urban planning",
+  "Higher education / Research / Academia",
+  "Renewables / Environment",
+  "Other",
+  "None"
+)
+
+clean_data$plsector <- factor(sector_job_level[as.integer(raw_data$plsector)], levels = sector_job_level)
+
+#### Employment xp
+
+clean_data$plyexp <- as.integer(raw_data$plyexp)
+
+#### Employment rate
+
+clean_data$plrate <- as.integer(raw_data$plrate)
+
+#### Seniority level
+
+seniority_level_levels <- c(
+                            "Intern / Entry level position",
+                            "No managerial function",
+                            "Lower management",
+                            "Middle management",
+                            "Top management",
+                            "Never worked"
+                            )
+clean_data$plsenior <- factor(seniority_level_levels[as.integer(raw_data$plsenior)], levels = seniority_level_levels)
+
+
+#### skills
+
+skills_levels <- c(
+                    "Statistical programming (R, SAS, Python (Statistics and ML libraries), SPSS, Stata, etc.)",
+                    "Other programming (C, C++, Java, Python, etc.)",
+                    "Data visualization (Power BI, Tableau, Looker Studio, etc.)",
+                    "Scientific writing and/or research",
+                    "Project management",
+                    "Time management"
+                  )
+
+skill_cols <- paste0("plskill.", 1:6, ".")
+
+# matrice 0/1 
+skill_mat <- as.data.frame(lapply(raw_data[skill_cols], function(x) as.integer(as.character(x))))
+
+# 
+clean_data$skills <- lapply(seq_len(nrow(skill_mat)), function(i) {
+  idx <- which(skill_mat[i, ] == 1)
+  skills_levels[idx]
+})
+
+clean_data$skills_str <- vapply(clean_data$skills, function(x) {
+  if (length(x) == 0) NA_character_ else paste(x, collapse = "; ")
+}, character(1))
+
 ####################################################################
 #   Study variables
 ####################################################################

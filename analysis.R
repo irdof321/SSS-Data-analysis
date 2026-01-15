@@ -2,6 +2,9 @@
 #     Libraries
 ####################################################################
 library(lubridate)
+library(dplyr)
+library(tidyr)
+
 
 
 ####################################################################
@@ -362,6 +365,130 @@ clean_data$skills <- lapply(seq_len(nrow(skill_mat)), function(i) {
 clean_data$skills_str <- vapply(clean_data$skills, function(x) {
   if (length(x) == 0) NA_character_ else paste(x, collapse = "; ")
 }, character(1))
+
+
+#### skills importance
+
+theme_levels <- c(
+  "Data cleaning and preparation",
+  "Descriptive analysis",
+  "Inferential analysis",
+  "Modeling / Machine learning",
+  "Development or automation of statistical tools",
+  "Supervision or validation of statistical work carried out by others"
+)
+
+importance_levels <- c(
+  "Not at all important", "Slightly important", "Moderately important",
+  "Important", "Very important"
+)
+
+involvement_levels <- c(
+  "No use", "Direct practice", "Supervision", "Direct practice and supervision"
+)
+
+# colonnes à prendre
+ustime_cols <- grep("^ustime\\.[1-6]\\.\\.[1-2]\\.$", names(raw_data), value = TRUE)
+
+# pour chaque ligne, construit une petite table tidy 6x2
+ustime_list <- lapply(seq_len(nrow(raw_data)), function(i) {
+  tmp <- raw_data[i, ustime_cols, drop = FALSE]
+  
+  long <- tidyr::pivot_longer(
+    tmp,
+    cols = everything(),
+    names_to = c("theme_id", "scale_id"),
+    names_pattern = "^ustime\\.(\\d+)\\.\\.(\\d+)\\.$",
+    values_to = "value"
+  ) %>%
+    mutate(
+      theme_id = as.integer(theme_id),
+      scale_id = as.integer(scale_id)
+    ) %>%
+    pivot_wider(
+      names_from = scale_id,
+      values_from = value,
+      names_prefix = "scale_"
+    ) %>%
+    transmute(
+      theme_id,
+      theme = theme_levels[theme_id],
+      importance_code = scale_1,
+      involvement_code = scale_2,
+      importance = ifelse(is.na(importance_code), NA_character_, importance_levels[importance_code + 1]),
+      involvement = ifelse(is.na(involvement_code), NA_character_, involvement_levels[involvement_code + 1])
+    )
+  
+  long
+})
+
+clean_data$ustime <- ustime_list
+
+
+#### work salary
+
+x <- as.character(raw_data$issalary)
+x <- gsub("'", "", x)          # remove tausend separator 1'234
+x <- gsub(" ", "", x)          # remove spaces
+x <- gsub(",", ".", x)         # comma to point
+clean_data$salary <- suppressWarnings(as.numeric(x))
+
+#### work satisfactrion
+
+work_satisfaction_levels <- c(
+                              "Very satisfied",
+                              "Quite satisfied",
+                              "Neutral",
+                              "Not quite satisfied",
+                              "Not at all satisfied"
+                              )
+
+clean_data$worksatisfction <- factor(work_satisfaction_levels[as.integer(raw_data$issatisf)], levels = work_satisfaction_levels)
+
+
+
+
+satisf_levels <- c(
+  "Very satisfied",
+  "Somewhat satisfied",
+  "Neutral",
+  "Not so satisfied",
+  "Not at all satisfied"
+)
+
+# Mets ici les 12 textes (dans l’ordre 1..12)
+satisf_items <- c(
+  "Interesting and meaningful work",
+  "Opportunity to exercise job-related expertise and judgment",
+  "Work that makes a positive contribution",
+  "Pay",
+  "Benefits (e.g., leave, health, insurance, retirement benefits)",
+  "Learning and development opportunities (e.g., training, continuing ...)",
+  "Opportunity for advancement",
+  "Work-life balance",
+  "Work flexibility (e.g., telework, alternative work schedules, core hours)",
+  "Relationships with coworkers and supervisors",
+  "Recognition and appreciation",
+  "Manageability of job stress"
+)
+
+issatisf_cols <- grep("^issatisf2\\.[0-9]+\\.$", names(raw_data), value = TRUE)
+
+# Convertit tout en numérique (en gardant NA)
+issatisf_mat <- as.data.frame(lapply(raw_data[issatisf_cols], function(x) {
+  suppressWarnings(as.integer(as.character(x)))
+}))
+
+clean_data$issatisf2 <- lapply(seq_len(nrow(issatisf_mat)), function(i) {
+  codes <- as.integer(issatisf_mat[i, ])
+  data.frame(
+    item_id = seq_along(codes),
+    item = if (length(satisf_items) >= length(codes)) satisf_items[seq_along(codes)] else NA_character_,
+    code = codes,
+    label = ifelse(is.na(codes), NA_character_, satisf_levels[codes]),
+    stringsAsFactors = FALSE
+  )
+})
 
 ####################################################################
 #   Study variables

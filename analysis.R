@@ -645,6 +645,65 @@ save_topn_barplot <- function(df, xvar, n_top, title, filename, xlab = NULL) {
   )
 }
 
+# Helper: donut plot with legend on the side (no labels inside)
+save_donut_counts <- function(df, xvar, title, filename,
+                              palette = NULL,
+                              wrap_width = NULL,
+                              drop_na = TRUE,
+                              legend_show_pct = TRUE) {
+  
+  dd <- df %>%
+    mutate(cat = as.character(.data[[xvar]])) %>%
+    { if (drop_na) dplyr::filter(., !is.na(cat), cat != "") else . } %>%
+    count(cat, name = "n") %>%
+    mutate(pct = n / sum(n))
+  
+  # Optional wrapping for long category names (legend display)
+  cat_disp <- dd$cat
+  if (!is.null(wrap_width)) {
+    cat_disp <- stringr::str_wrap(cat_disp, width = wrap_width)
+  }
+  
+  # Legend labels (optionally include % and N)
+  if (legend_show_pct) {
+    dd$cat_lab <- paste0(cat_disp, " — ", dd$n, " (", scales::percent(dd$pct, accuracy = 1), ")")
+  } else {
+    dd$cat_lab <- cat_disp
+  }
+  
+  # IMPORTANT: keep fill mapped to raw 'cat' (so palettes match)
+  p <- ggplot(dd, aes(x = 2, y = n, fill = cat)) +
+    geom_col(width = 0.9, color = "white") +
+    coord_polar(theta = "y") +
+    xlim(0.5, 2.6) +
+    labs(title = title, fill = NULL) +
+    theme_void(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      legend.position = "right",
+      legend.text = element_text(size = 10),
+      legend.key.size = unit(0.6, "lines"),
+      plot.margin = margin(10, 30, 10, 10)
+    ) +
+    # Replace legend text with our custom labels (but keep color mapping stable)
+    scale_fill_discrete(labels = dd$cat_lab)
+  
+  # Manual colors if provided (NOW it will work because fill = cat)
+  if (!is.null(palette)) {
+    p <- p + scale_fill_manual(values = palette, labels = dd$cat_lab)
+  }
+  
+  print(p)
+  ggsave(
+    filename = file.path(out_dir, filename),
+    plot = p,
+    width = 12, height = 6, dpi = 300
+  )
+}
+
+
+
+
 # =========================
 # 1) Birth year (10-year bins)
 # =========================
@@ -685,9 +744,31 @@ if (any(!is.na(clean_data$tryear))) {
 save_barplot_counts(clean_data, "sssknow", "SSS awareness", "basic_sss_awareness.png",
                     xlab = NULL, rotate_x = FALSE)
 
+save_donut_counts(
+  clean_data, "sssknow",
+  title = "SSS awareness",
+  filename = "donut_sss_awareness.png",
+  palette = c("FALSE" = "#D55E00", "TRUE" = "#009E73"),
+  drop_na = TRUE
+)
+
+
 # 4) Gender
 save_barplot_counts(clean_data, "dmgender", "Gender", "basic_gender.png",
                     xlab = NULL)
+
+save_donut_counts(
+  clean_data, "dmgender",
+  title = "Gender",
+  filename = "donut_gender.png",
+  palette = c(
+    "Man" = "blue",
+    "Woman" = "red",
+    "Other" = "yellow",
+    "Prefer not to say" = "pink"
+  ),
+  drop_na = TRUE
+)
 
 # 5) Origin
 save_barplot_counts(clean_data, "origin", "Origin", "basic_origin.png",
@@ -755,13 +836,40 @@ save_barplot_counts(clean_data, "continuous_education", "Continuous education",
 save_barplot_counts(clean_data, "trcont2", "Continuous education beyond 'No'",
                     "basic_continuous_education_yesno.png", xlab = NULL, rotate_x = FALSE)
 
+save_donut_counts(
+  clean_data, "continuous_education",
+  title = "Continuous education",
+  filename = "donut_continuous_education.png",
+  wrap_width = 26,
+  drop_na = TRUE
+)
+
+
 # 14) Employment status (employed)
 save_barplot_counts(clean_data, "employed", "Employment status",
                     "basic_employment_status.png", xlab = NULL, rotate_x = FALSE)
 
+save_donut_counts(
+  clean_data, "employed",
+  title = "Employment status",
+  filename = "donut_employment_status.png",
+  palette = c("FALSE" = "#D55E00", "TRUE" = "#009E73"),
+  drop_na = TRUE
+)
+
+
 # 15) Job status
 save_barplot_counts(clean_data, "job_status", "Job status",
                     "basic_job_status.png", xlab = NULL)
+
+save_donut_counts(
+  clean_data, "job_status",
+  title = "Job status",
+  filename = "donut_job_status.png",
+  wrap_width = 18,
+  drop_na = TRUE
+)
+
 
 # 16) Job role (Top 20 + Other)
 save_topn_barplot(clean_data, "job_role", n_top = 20,

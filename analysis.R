@@ -560,10 +560,36 @@ save_barplot_counts <- function(df, xvar, title, filename,
 }
 
 # Helper: numeric binning plot (counts)
-save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL) {
+# Helper: numeric binning plot (counts) - robust labels (no scientific notation)
+save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL,
+                               label_mode = c("default", "year", "k")) {
+  label_mode <- match.arg(label_mode)
+  
+  # Custom labels built from numeric breaks (NOT from cut() default strings)
+  if (label_mode == "year") {
+    # 1950–1959
+    bin_labels <- paste0(breaks[-length(breaks)], "\u2013", breaks[-1] - 1)
+  } else if (label_mode == "k") {
+    # 50k–59k (for CHF)
+    lo <- breaks[-length(breaks)] / 1000
+    hi <- (breaks[-1] - 1) / 1000
+    bin_labels <- paste0(lo, "k\u2013", floor(hi), "k")
+  } else {
+    # default numeric labels without sci notation
+    bin_labels <- format(breaks[-length(breaks)], scientific = FALSE, trim = TRUE)
+  }
+  
   tmp <- df %>%
     filter(!is.na(.data[[numvar]])) %>%
-    mutate(bin = cut(.data[[numvar]], breaks = breaks, right = FALSE, include.lowest = TRUE))
+    mutate(
+      bin = cut(
+        .data[[numvar]],
+        breaks = breaks,
+        right = FALSE,
+        include.lowest = TRUE,
+        labels = bin_labels
+      )
+    )
   
   p <- ggplot(tmp, aes(x = bin)) +
     geom_bar(fill = my_fill, color = my_border) +
@@ -586,6 +612,7 @@ save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL)
     width = 12, height = 6, dpi = 300
   )
 }
+
 
 # Helper: Top N categories + Other
 save_topn_barplot <- function(df, xvar, n_top, title, filename, xlab = NULL) {
@@ -632,10 +659,10 @@ if (any(!is.na(clean_data$dmbirth))) {
     breaks = birth_breaks,
     title = "Birth year (10-year bins)",
     filename = "basic_birthyear_10y.png",
-    xlab = "Birth year bin"
+    xlab = "Birth year bin",
+    label_mode = "year"
   )
 }
-
 # =========================
 # 2) Training completion year (5-year bins)
 # =========================
@@ -717,6 +744,10 @@ ggsave(
 )
 
 # 12) Continuous education
+clean_data$continuous_education <- fct_relabel(
+  clean_data$continuous_education,
+  ~ stringr::str_wrap(.x, width = 28)
+)
 save_barplot_counts(clean_data, "continuous_education", "Continuous education",
                     "basic_continuous_education.png", xlab = NULL)
 
@@ -738,9 +769,27 @@ save_topn_barplot(clean_data, "job_role", n_top = 20,
                   filename = "basic_job_role_top20.png",
                   xlab = NULL)
 
-# 17) Sector
-save_barplot_counts(clean_data, "plsector", "Sector",
-                    "basic_sector.png", xlab = NULL)
+# 17) Sector (drop NA + wrap long labels + bigger export)
+p_sector <- clean_data %>%
+  filter(!is.na(plsector)) %>%                              # remove NA category
+  mutate(plsector_wrap = stringr::str_wrap(as.character(plsector), width = 22)) %>%
+  ggplot(aes(x = plsector_wrap)) +
+  geom_bar(fill = my_fill, color = my_border) +
+  labs(title = "Sector", x = NULL, y = "N respondents") +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+print(p_sector)
+ggsave(
+  filename = file.path(out_dir, "basic_sector.png"),
+  plot = p_sector,
+  width = 18, height = 9, dpi = 300
+)
+
 
 # 18) Years of experience
 save_barplot_counts(clean_data, "plyexp", "Years of experience",
@@ -766,7 +815,8 @@ if (any(!is.na(clean_data$salary))) {
     breaks = salary_breaks,
     title = "Salary (normalized to 100% workload, 10k bins)",
     filename = "basic_salary_10k.png",
-    xlab = "Salary bin (CHF)"
+    xlab = "Salary bin (CHF)",
+    label_mode = "k"
   )
 }
 

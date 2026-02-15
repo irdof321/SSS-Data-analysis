@@ -5,12 +5,19 @@ library(lubridate)
 library(dplyr)
 library(tidyr)
 
+library(ggplot2)
+library(forcats)
+library(scales)
+library(readr)
+
 
 
 ####################################################################
 #      CONSTANTS PARAMETERS
 ####################################################################
-data_file <- "sample_survey_results.csv"
+#data_file <- "sample_survey_results.csv"
+#data_file <- "simulated_sample_survey_results_100.csv" #"With some categories missing"
+data_file <- "simulated_sample_survey_results_300.csv"
 REMOVE_NOT_SUB = FALSE # remove rows without a submitted date
 
 
@@ -431,7 +438,7 @@ x <- as.character(raw_data$issalary)
 x <- gsub("'", "", x)          # remove tausend separator 1'234
 x <- gsub(" ", "", x)          # remove spaces
 x <- gsub(",", ".", x)         # comma to point
-clean_data$salary <- suppressWarnings(as.numeric(x))
+clean_data$salary <- suppressWarnings(as.numeric(x))/clean_data$plrate*100 # report salary to an 100%
 
 #### work satisfactrion
 
@@ -491,6 +498,340 @@ clean_data$issatisf2 <- lapply(seq_len(nrow(issatisf_mat)), function(i) {
 })
 
 ####################################################################
+#   Derived variables
+####################################################################
+
+
+
+
+####################################################################
 #   Study variables
 ####################################################################
+
+
+
+####################################################################
+#   Results analysis
+####################################################################
+# 0) dossier de sortie
+out_dir <- "descriptives_plots"
+if (!dir.exists(out_dir)) dir.create(out_dir)
+
+
+readr::write_csv(clean_data, "my_df.csv")
+
+
+
+#5.4.0 Basic datas
+
+############################### ADD down here
+
+# ---- Style (colors) ----
+my_fill <- "#2C7FB8"   # blue
+my_border <- NA        # set to "white" if you want a thin border
+
+# Helper: save a bar plot of counts (single variable)
+# NOTE: title is now "presentation title" ONLY (no variable name inside)
+save_barplot_counts <- function(df, xvar, title, filename,
+                                xlab = NULL, rotate_x = TRUE) {
+  p <- ggplot(df, aes(x = .data[[xvar]])) +
+    geom_bar(fill = my_fill, color = my_border) +
+    labs(
+      title = title,
+      x = xlab,
+      y = "N respondents"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.major.x = element_blank()
+    )
+  
+  if (rotate_x) {
+    p <- p + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }
+  
+  print(p)
+  ggsave(
+    filename = file.path(out_dir, filename),
+    plot = p,
+    width = 12, height = 6, dpi = 300
+  )
+}
+
+# Helper: numeric binning plot (counts)
+save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL) {
+  tmp <- df %>%
+    filter(!is.na(.data[[numvar]])) %>%
+    mutate(bin = cut(.data[[numvar]], breaks = breaks, right = FALSE, include.lowest = TRUE))
+  
+  p <- ggplot(tmp, aes(x = bin)) +
+    geom_bar(fill = my_fill, color = my_border) +
+    labs(
+      title = title,
+      x = xlab,
+      y = "N respondents"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+  
+  print(p)
+  ggsave(
+    filename = file.path(out_dir, filename),
+    plot = p,
+    width = 12, height = 6, dpi = 300
+  )
+}
+
+# Helper: Top N categories + Other
+save_topn_barplot <- function(df, xvar, n_top, title, filename, xlab = NULL) {
+  tmp <- df %>%
+    filter(!is.na(.data[[xvar]]), .data[[xvar]] != "") %>%
+    count(.data[[xvar]], name = "n") %>%
+    arrange(desc(n)) %>%
+    mutate(
+      rank = row_number(),
+      group = ifelse(rank <= n_top, as.character(.data[[xvar]]), "Other")
+    ) %>%
+    count(group, wt = n, name = "n") %>%
+    mutate(group = forcats::fct_reorder(group, n))
+  
+  p <- ggplot(tmp, aes(x = group, y = n)) +
+    geom_col(fill = my_fill, color = my_border) +
+    coord_flip() +
+    labs(title = title, x = xlab, y = "N respondents") +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.major.y = element_blank()
+    )
+  
+  print(p)
+  ggsave(
+    filename = file.path(out_dir, filename),
+    plot = p,
+    width = 12, height = 7, dpi = 300
+  )
+}
+
+# =========================
+# 1) Birth year (10-year bins)
+# =========================
+if (any(!is.na(clean_data$dmbirth))) {
+  min_b <- floor(min(clean_data$dmbirth, na.rm = TRUE) / 10) * 10
+  max_b <- ceiling(max(clean_data$dmbirth, na.rm = TRUE) / 10) * 10 + 10
+  birth_breaks <- seq(min_b, max_b, by = 10)
+  
+  save_binned_counts(
+    clean_data,
+    numvar = "dmbirth",
+    breaks = birth_breaks,
+    title = "Birth year (10-year bins)",
+    filename = "basic_birthyear_10y.png",
+    xlab = "Birth year bin"
+  )
+}
+
+# =========================
+# 2) Training completion year (5-year bins)
+# =========================
+if (any(!is.na(clean_data$tryear))) {
+  min_t <- floor(min(clean_data$tryear, na.rm = TRUE) / 5) * 5
+  max_t <- ceiling(max(clean_data$tryear, na.rm = TRUE) / 5) * 5 + 5
+  tryear_breaks <- seq(min_t, max_t, by = 5)
+  
+  save_binned_counts(
+    clean_data,
+    numvar = "tryear",
+    breaks = tryear_breaks,
+    title = "Training completion year (5-year bins)",
+    filename = "basic_trainingyear_5y.png",
+    xlab = "Training year bin"
+  )
+}
+
+# 3) SSS awareness
+save_barplot_counts(clean_data, "sssknow", "SSS awareness", "basic_sss_awareness.png",
+                    xlab = NULL, rotate_x = FALSE)
+
+# 4) Gender
+save_barplot_counts(clean_data, "dmgender", "Gender", "basic_gender.png",
+                    xlab = NULL)
+
+# 5) Origin
+save_barplot_counts(clean_data, "origin", "Origin", "basic_origin.png",
+                    xlab = NULL)
+
+# 6) Residency (canton)
+save_barplot_counts(clean_data, "dmres", "Residency (canton)", "basic_residency.png",
+                    xlab = NULL)
+
+# 7) Work location
+save_barplot_counts(clean_data, "dmwork", "Work location", "basic_work_location.png",
+                    xlab = NULL)
+
+# 8) SSS involvement
+save_barplot_counts(clean_data, "sssmember", "SSS involvement", "basic_sss_involvement.png",
+                    xlab = NULL)
+
+# 9) Education level
+save_barplot_counts(clean_data, "trlvl", "Education level", "basic_education_level.png",
+                    xlab = NULL)
+
+# 10) Study location
+save_barplot_counts(clean_data, "study_location", "Study location", "basic_study_location.png",
+                    xlab = NULL)
+
+# 11) Training fields (multiple answers allowed)
+df_tf <- clean_data %>%
+  tidyr::unnest_longer(training_fields_list, values_to = "training_field") %>%
+  mutate(training_field = trimws(as.character(training_field))) %>%
+  filter(!is.na(training_field), training_field != "") %>%
+  mutate(training_field = factor(training_field, levels = training_field_study))
+
+p_tf <- df_tf %>%
+  count(training_field, name = "n") %>%
+  ggplot(aes(x = training_field, y = n)) +
+  geom_col(fill = my_fill, color = my_border) +
+  labs(
+    title = "Training fields (multiple answers allowed)",
+    x = NULL,
+    y = "N respondents (selections)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+print(p_tf)
+ggsave(
+  filename = file.path(out_dir, "basic_training_fields.png"),
+  plot = p_tf,
+  width = 14, height = 7, dpi = 300
+)
+
+# 12) Continuous education
+save_barplot_counts(clean_data, "continuous_education", "Continuous education",
+                    "basic_continuous_education.png", xlab = NULL)
+
+# 13) Continuous education beyond 'No'
+save_barplot_counts(clean_data, "trcont2", "Continuous education beyond 'No'",
+                    "basic_continuous_education_yesno.png", xlab = NULL, rotate_x = FALSE)
+
+# 14) Employment status (employed)
+save_barplot_counts(clean_data, "employed", "Employment status",
+                    "basic_employment_status.png", xlab = NULL, rotate_x = FALSE)
+
+# 15) Job status
+save_barplot_counts(clean_data, "job_status", "Job status",
+                    "basic_job_status.png", xlab = NULL)
+
+# 16) Job role (Top 20 + Other)
+save_topn_barplot(clean_data, "job_role", n_top = 20,
+                  title = "Job role (Top 20 + Other)",
+                  filename = "basic_job_role_top20.png",
+                  xlab = NULL)
+
+# 17) Sector
+save_barplot_counts(clean_data, "plsector", "Sector",
+                    "basic_sector.png", xlab = NULL)
+
+# 18) Years of experience
+save_barplot_counts(clean_data, "plyexp", "Years of experience",
+                    "basic_years_experience.png", xlab = NULL)
+
+# 19) Employment rate
+save_barplot_counts(clean_data, "plrate", "Employment rate",
+                    "basic_employment_rate.png", xlab = NULL)
+
+# 20) Seniority level
+save_barplot_counts(clean_data, "plsenior", "Seniority level",
+                    "basic_seniority.png", xlab = NULL)
+
+# 21) Salary (10k bins)
+if (any(!is.na(clean_data$salary))) {
+  min_s <- floor(min(clean_data$salary, na.rm = TRUE) / 10000) * 10000
+  max_s <- ceiling(max(clean_data$salary, na.rm = TRUE) / 10000) * 10000 + 10000
+  salary_breaks <- seq(min_s, max_s, by = 10000)
+  
+  save_binned_counts(
+    clean_data,
+    numvar = "salary",
+    breaks = salary_breaks,
+    title = "Salary (normalized to 100% workload, 10k bins)",
+    filename = "basic_salary_10k.png",
+    xlab = "Salary bin (CHF)"
+  )
+}
+
+# 22) Work satisfaction
+save_barplot_counts(clean_data, "worksatisfction", "Work satisfaction",
+                    "basic_work_satisfaction.png", xlab = NULL)
+
+############################## ADD above
+
+
+
+# 5.4.1
+## ADD here the plots and data for the section 5.4.1 of the protocol
+
+
+# 1) Unnest the list-column: one row per (respondent x training field)
+df_fields <- clean_data %>%
+  tidyr::unnest_longer(training_fields_list, values_to = "training_field") %>%
+  mutate(training_field = trimws(as.character(training_field))) %>%
+  filter(!is.na(training_field), training_field != "") %>%
+  filter(!is.na(dmgender), dmgender != "")
+
+# Optional: enforce the field order if you have 'training_field_study' defined
+# (this keeps fields ordered as in your protocol list)
+df_fields <- df_fields %>%
+  mutate(training_field = factor(training_field, levels = training_field_study))
+
+# 2) Compute percentages within each field (so bars sum to 100% per field)
+df_plot <- df_fields %>%
+  count(training_field, dmgender, name = "n") %>%
+  group_by(training_field) %>%
+  mutate(pct = n / sum(n)) %>%
+  ungroup()
+
+# 3) Plot: grouped bars (4 bars per field) with manual colors
+p_gender_by_field <- ggplot(df_plot, aes(x = training_field, y = pct, fill = dmgender)) +
+  geom_col(position = position_dodge(width = 0.85), width = 0.8) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, 1)) +
+  scale_fill_manual(
+    values = c(
+      "Man" = "blue",
+      "Woman" = "red",
+      "Other" = "yellow",
+      "Prefer not to say" = "green"
+    ),
+    drop = FALSE
+  ) +
+  labs(
+    title = "Gender distribution by training field",
+    x = "Training field",
+    y = "Share within field",
+    fill = "Gender"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  )
+
+print(p_gender_by_field)
+
+# 4) Save (keeps your export logic)
+ggsave(
+  filename = file.path(out_dir, "gender_by_training_field.png"),
+  plot = p_gender_by_field,
+  width = 14, height = 7, dpi = 300
+)
 

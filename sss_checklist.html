@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSS Analysis Checklist</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@300;400;600;700&display=swap');
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2330;
+  --border: #21262d;
+  --accent: #2C7FB8;
+  --accent-glow: rgba(44,127,184,0.18);
+  --doing: #e6a817;
+  --doing-glow: rgba(230,168,23,0.12);
+  --done: #3fb950;
+  --done-glow: rgba(63,185,80,0.1);
+  --text: #c9d1d9;
+  --text-dim: #8b949e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Sora', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1.5rem 5rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.8rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.header-left h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #fff;
+}
+.header-left p { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.25rem; }
+.header-stats { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center; }
+.stat-pill {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.3rem 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot-todo  { background: var(--text-dim); }
+.dot-doing { background: var(--doing); box-shadow: 0 0 5px var(--doing); }
+.dot-done  { background: var(--done);  box-shadow: 0 0 5px var(--done); }
+
+.progress-row {
+  display: flex;
+  height: 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface2);
+  margin-bottom: 1.5rem;
+}
+.seg-done  { background: var(--done);  transition: width 0.4s; }
+.seg-doing { background: var(--doing); transition: width 0.4s; }
+
+.filters {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.filter-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+
+.section {
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.section-header {
+  background: var(--surface);
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  user-select: none;
+}
+.section-header:hover { background: var(--surface2); }
+.section-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.63rem;
+  color: var(--accent);
+  background: var(--accent-glow);
+  border: 1px solid rgba(44,127,184,0.3);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.section-title { font-weight: 600; font-size: 0.87rem; flex: 1; }
+.minibar { display: flex; gap: 2px; align-items: center; }
+.mini-dot { width: 7px; height: 7px; border-radius: 50%; }
+.chevron { color: var(--text-dim); font-size: 0.58rem; transition: transform 0.2s; }
+.section.collapsed .chevron { transform: rotate(-90deg); }
+.section.collapsed .section-body { display: none; }
+
+.section-note {
+  border-top: 1px dashed var(--border);
+  padding: 0.5rem 1rem;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  font-style: italic;
+  background: rgba(0,0,0,0.1);
+}
+
+/* ── TASK ── */
+.task {
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 1rem;
+  transition: background 0.12s;
+}
+.task:hover { background: rgba(255,255,255,0.015); }
+.task.status-doing { background: var(--doing-glow); border-left: 2px solid var(--doing); }
+.task.status-done  { background: var(--done-glow);  border-left: 2px solid transparent; }
+
+.task-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+/* status column: 3 stacked circles */
+.status-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 1px;
+  flex-shrink: 0;
+}
+.s-btn {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  color: var(--border);
+  transition: all 0.15s;
+  padding: 0;
+}
+.s-btn:hover { transform: scale(1.2); }
+.s-btn.active-todo  { border-color: var(--text-dim); color: var(--text-dim); background: rgba(139,148,158,0.15); }
+.s-btn.active-doing { border-color: var(--doing); color: var(--doing); background: var(--doing-glow); box-shadow: 0 0 6px rgba(230,168,23,0.3); }
+.s-btn.active-done  { border-color: var(--done);  color: var(--done);  background: var(--done-glow);  box-shadow: 0 0 6px rgba(63,185,80,0.3); }
+
+.task-body { flex: 1; min-width: 0; }
+.task-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.task-text { font-size: 0.84rem; line-height: 1.5; }
+.status-done .task-text  { color: var(--text-dim); text-decoration: line-through; }
+.status-doing .task-text { color: #fff; }
+.badge-pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  background: rgba(63,185,80,0.1);
+  color: var(--done);
+  border: 1px solid rgba(63,185,80,0.22);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+.task-sub { font-size: 0.74rem; color: var(--text-dim); margin-top: 0.15rem; font-style: italic; }
+
+.xpand-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.xpand-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+.xpand-btn.has-data { color: var(--accent); }
+
+/* ── DETAILS PANEL ── */
+.details-panel {
+  margin-top: 0.65rem;
+  display: none;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+.details-panel.open { display: flex; }
+
+.dl { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.35rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chip {
+  font-size: 0.7rem;
+  padding: 3px 9px 3px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--text-dim);
+  display: flex; align-items: center; gap: 4px;
+  user-select: none;
+  transition: all 0.14s;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip.on { background: var(--accent-glow); border-color: var(--accent); color: #fff; }
+
+.cmt {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.45rem 0.65rem;
+  color: var(--text);
+  font-family: 'Sora', sans-serif;
+  font-size: 0.78rem;
+  resize: vertical;
+  min-height: 50px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cmt:focus { border-color: var(--accent); }
+.cmt::placeholder { color: var(--text-dim); }
+
+/* priority badge */
+.prio-row { display: flex; gap: 0.4rem; align-items: center; }
+.prio-btn {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.prio-btn:hover { color: var(--text); }
+.prio-btn.on-low    { background: rgba(63,185,80,0.12);  border-color: var(--done);   color: var(--done);   }
+.prio-btn.on-medium { background: rgba(230,168,23,0.12); border-color: var(--doing);  color: var(--doing);  }
+.prio-btn.on-high   { background: rgba(224,82,82,0.12);  border-color: #e05252;       color: #e05252;       }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>SSS Analysis Checklist</h1>
+    <p>Professional landscape of Statisticians in Switzerland</p>
+  </div>
+  <div class="header-stats" id="hstats"></div>
+</header>
+
+<div class="progress-row" id="prow"></div>
+
+<div class="filters">
+  <button class="filter-btn active" data-f="all">Tout</button>
+  <button class="filter-btn" data-f="todo">⬜ À faire</button>
+  <button class="filter-btn" data-f="doing">🔄 En cours</button>
+  <button class="filter-btn" data-f="done">✅ Fait</button>
+  <button class="filter-btn" data-f="commented">💬 Commenté</button>
+  <button class="filter-btn" data-f="high">🔴 Priorité haute</button>
+</div>
+
+<div id="app"></div>
+
+<script>
+const GRAPHS = [
+  {id:'bar',     ico:'▊',  lbl:'Bar chart'},
+  {id:'hist',    ico:'▨',  lbl:'Histogramme'},
+  {id:'donut',   ico:'◎',  lbl:'Donut / Pie'},
+  {id:'box',     ico:'⊡',  lbl:'Boxplot'},
+  {id:'heatmap', ico:'▦',  lbl:'Heatmap'},
+  {id:'scatter', ico:'⁝',  lbl:'Scatter'},
+  {id:'grouped', ico:'▐▐', lbl:'Grouped bar'},
+  {id:'stacked', ico:'▬',  lbl:'Stacked bar'},
+  {id:'line',    ico:'∿',  lbl:'Line'},
+  {id:'table',   ico:'⊞',  lbl:'Table'},
+  {id:'lollipop',ico:'⊙',  lbl:'Lollipop'},
+];
+
+const PRIOS = ['low','medium','high'];
+
+const SECTIONS = [
+  { id:'s4',  tag:'§ 4.3',  title:'Data Cleaning & Preparation',
+    tasks:[
+      {id:'t1', text:"4.3.1 — Vérification de l'intégrité des données",       sub:"Types, NA, doublons, cohérence CSV"},
+      {id:'t2', text:"4.3.2 — Validation des critères d'éligibilité",          sub:"Exclure : étudiants FT, retraités, sans emploi"},
+      {id:'t3', text:"4.3.3 — Gestion des données manquantes",                 sub:"Documenter patterns NA et stratégie"},
+      {id:'t4', text:"4.3.4 — Consistency checks",                             sub:"Diplôme ≥ naissance+20 ; taux 2.5–100% ; âge–expérience ≥ 15"},
+      {id:'t5', text:"4.3.5 — Anonymisation des champs texte libres",          sub:"Vérifier job_role et trarea.other"},
+      {id:'t6', text:"4.3.6 — Sauvegarder raw / cleaned / analysis datasets séparément"},
+    ]
+  },
+  { id:'s52', tag:'§ 5.2',  title:'Variables dérivées',
+    tasks:[
+      {id:'t7', text:"Standardisation salaire → 100% FTE",                     pre:true, sub:"salary = issalary / plrate × 100"},
+      {id:'t8', text:"Créer career_stage (early / mid / senior)",               sub:"Bornes data-driven sur plyexp"},
+    ]
+  },
+  { id:'s540', tag:'§ 5.4.0', title:'Descriptives — toutes variables (full sample + SSS members)',
+    note:"Catégorielles : fréquence + %. Continues : mean/SD/median/IQR/min/max. Tout dupliquer pour SSS members.",
+    tasks:[
+      {id:'t10', text:"Âge (10-year bins)",                       pre:true},
+      {id:'t11', text:"Année de fin de formation",                pre:true},
+      {id:'t12', text:"SSS awareness (sssknow)",                  pre:true},
+      {id:'t13', text:"SSS time (ssstime)"},
+      {id:'t14', text:"SSS involvement (sssmember)",              pre:true},
+      {id:'t15', text:"Genre (dmgender)",                         pre:true},
+      {id:'t16', text:"Origine (origin)",                         pre:true},
+      {id:'t17', text:"Résidence — canton (dmres)",               pre:true},
+      {id:'t18', text:"Lieu de travail — canton (dmwork)",        pre:true},
+      {id:'t19', text:"Niveau d'études (trlvl)",                  pre:true},
+      {id:'t20', text:"Lieu d'études (study_location)",           pre:true},
+      {id:'t21', text:"Domaines de formation (multi-choix)",      pre:true},
+      {id:'t22', text:"Formation continue",                       pre:true},
+      {id:'t23', text:"Statut d'emploi",                          pre:true},
+      {id:'t24', text:"Titre de poste (Top N + Other)",           pre:true},
+      {id:'t25', text:"Secteur (plsector)",                       pre:true},
+      {id:'t26', text:"Années d'expérience (plyexp)",             pre:true},
+      {id:'t27', text:"Taux d'emploi (plrate)",                   pre:true},
+      {id:'t28', text:"Séniorité (plsenior)",                     pre:true},
+      {id:'t29', text:"Salaire normalisé 100% (bins 10k)",        pre:true},
+      {id:'t30', text:"Satisfaction globale (worksatisfction)",   pre:true},
+      {id:'t31', text:"Satisfaction détaillée × 12 items (issatisf2)", sub:"Heatmap ou stacked bar"},
+      {id:'t32', text:"Compétences (skills — multi)"},
+      {id:'t33', text:"Activités statistiques (ustime)", sub:"6 thèmes × importance + implication"},
+    ]
+  },
+  { id:'s541', tag:'§ 5.4.1', title:'Croisements formation × démographie',
+    tasks:[
+      {id:'t35', text:"Genre × domaine de formation",            pre:true},
+      {id:'t36', text:"Lieu d'études × genre"},
+      {id:'t37', text:"Niveau de diplôme × genre"},
+      {id:'t38', text:"Domaine de formation × lieu d'études"},
+    ]
+  },
+  { id:'s531', tag:'§ 5.3.1', title:'Career info for students',
+    tasks:[
+      {id:'t40', text:"Séniorité × niveau de diplôme"},
+      {id:'t41', text:"Job role × activity-based job profiles"},
+      {id:'t42', text:"Domaines de formation × genre × lieu d'études"},
+    ]
+  },
+  { id:'s532', tag:'§ 5.3.2', title:'Labour market needs',
+    tasks:[
+      {id:'t50', text:"Importance activités statistiques — overall + par secteur"},
+      {id:'t51', text:"Séniorité et expérience par secteur"},
+      {id:'t52', text:"Formation continue — overall + par secteur / séniorité / expérience"},
+      {id:'t53', text:"Définir activity-based job profiles (scoring ou clustering)"},
+    ]
+  },
+  { id:'s533', tag:'§ 5.3.3', title:'Salary & employment conditions',
+    tasks:[
+      {id:'t60', text:"Distribution salariale par secteur, position, diplôme, expérience, séniorité, âge, région, genre"},
+      {id:'t61', text:"Satisfaction × secteur, diplôme, séniorité, salaire, taux, expérience"},
+      {id:'t62', text:"Conditions d'emploi : taux, statut contractuel"},
+    ]
+  },
+  { id:'s534', tag:'§ 5.3.4', title:'Foundations for future research',
+    tasks:[
+      {id:'t70', text:"Associations job role × compétences × satisfaction"},
+      {id:'t71', text:"Formation continue × (diplôme, domaine, secteur, profil, expé, séni, taux, SSS, âge, genre)"},
+    ]
+  },
+  { id:'s535', tag:'§ 5.3.5', title:'Hidden statisticians',
+    tasks:[
+      {id:'t80', text:"Identifier les rôles à forte activité stat sans titre 'statistician/data'", sub:"Score composite sur ustime"},
+      {id:'t81', text:"Secteur et domaine de formation des hidden roles"},
+      {id:'t82', text:"Compétences et activités : hidden vs explicites"},
+      {id:'t83', text:"Salaire et séniorité : hidden vs explicites"},
+    ]
+  },
+  { id:'sfin', tag:'Final', title:'Duplications SSS members + rapport',
+    tasks:[
+      {id:'t90', text:"Dupliquer toutes les analyses pour SSS members uniquement"},
+      {id:'t91', text:"Compiler les résultats dans le document de rapport"},
+      {id:'t92', text:"Vérifier que tous les % sont des entiers (sans décimales)"},
+    ]
+  },
+];
+
+// ── state ──
+let st = {};
+let filter = 'all';
+let xopen = new Set();
+
+function def(t) { return { status: t.pre?'done':'todo', graphs:[], comment:'', priority:'medium' }; }
+
+(function init(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('sss_v5')||'null'); } catch(e){}
+  SECTIONS.forEach(s => s.tasks.forEach(t => {
+    st[t.id] = saved&&saved[t.id] ? {...def(t),...saved[t.id]} : def(t);
+  }));
+})();
+
+function save(){ try{ localStorage.setItem('sss_v5',JSON.stringify(st)); }catch(e){} }
+
+// ── header & progress ──
+function updateTop(){
+  const all = Object.values(st);
+  const todo=all.filter(s=>s.status==='todo').length;
+  const doing=all.filter(s=>s.status==='doing').length;
+  const done=all.filter(s=>s.status==='done').length;
+  const total=all.length;
+  document.getElementById('hstats').innerHTML=`
+    <div class="stat-pill"><span class="dot dot-todo"></span>${todo} à faire</div>
+    <div class="stat-pill"><span class="dot dot-doing"></span>${doing} en cours</div>
+    <div class="stat-pill"><span class="dot dot-done"></span>${done} fait</div>
+  `;
+  const dp=total?Math.round(done/total*100):0;
+  const rp=total?Math.round(doing/total*100):0;
+  document.getElementById('prow').innerHTML=`
+    <div class="seg-done" style="width:${dp}%"></div>
+    <div class="seg-doing" style="width:${rp}%"></div>
+  `;
+}
+
+// ── render ──
+function visible(tid){
+  const s=st[tid];
+  if(filter==='all') return true;
+  if(filter==='commented') return s.comment.trim().length>0;
+  if(filter==='high') return s.priority==='high';
+  return s.status===filter;
+}
+
+function render(){
+  const app=document.getElementById('app');
+  app.innerHTML='';
+  SECTIONS.forEach(sec=>{
+    const vis=sec.tasks.filter(t=>visible(t.id));
+    if(!vis.length) return;
+    const el=document.createElement('div');
+    el.className='section';
+    el.id='sec-'+sec.id;
+
+    const dots=sec.tasks.map(t=>{
+      const s=st[t.id].status;
+      const col=s==='done'?'var(--done)':s==='doing'?'var(--doing)':'var(--border)';
+      return `<div class="mini-dot" style="background:${col}"></div>`;
+    }).join('');
+
+    el.innerHTML=`
+      <div class="section-header" onclick="togSec('${sec.id}')">
+        <span class="section-tag">${sec.tag}</span>
+        <span class="section-title">${sec.title}</span>
+        <div class="minibar">${dots}</div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="section-body" id="sbody-${sec.id}">
+        ${sec.note?`<div class="section-note">${sec.note}</div>`:''}
+        ${sec.tasks.map(t=>renderTask(t)).join('')}
+      </div>
+    `;
+    app.appendChild(el);
+
+    // hide filtered-out tasks
+    sec.tasks.forEach(t=>{
+      if(!visible(t.id)){
+        const te=document.getElementById('tsk-'+t.id);
+        if(te) te.classList.add('hidden');
+      }
+    });
+  });
+  updateTop();
+}
+
+function renderTask(t){
+  const s=st[t.id];
+  const isOpen=xopen.has(t.id);
+  const hasData=s.graphs.length>0||s.comment.trim().length>0;
+
+  const sBtns=[
+    {st:'todo',  ico:'○', tip:'À faire'},
+    {st:'doing', ico:'◐', tip:'En cours'},
+    {st:'done',  ico:'●', tip:'Fait'},
+  ].map(b=>`
+    <button class="s-btn${s.status===b.st?' active-'+b.st:''}"
+            title="${b.tip}"
+            onclick="setSt('${t.id}','${b.st}',event)">${b.ico}</button>
+  `).join('');
+
+  const gChips=GRAPHS.map(g=>`
+    <div class="chip${s.graphs.includes(g.id)?' on':''}"
+         onclick="togG('${t.id}','${g.id}',event)">${g.ico} ${g.lbl}</div>
+  `).join('');
+
+  const pBtns=PRIOS.map(p=>`
+    <button class="prio-btn${s.priority===p?' on-'+p:''}"
+            onclick="setPrio('${t.id}','${p}',event)">${p==='low'?'🟢 Basse':p==='medium'?'🟡 Moyenne':'🔴 Haute'}</button>
+  `).join('');
+
+  return `
+  <div class="task status-${s.status}" id="tsk-${t.id}">
+    <div class="task-top">
+      <div class="status-col">${sBtns}</div>
+      <div class="task-body">
+        <div class="task-row1">
+          <div class="task-text">
+            ${t.text}
+            ${t.pre?'<span class="badge-pre">✓ déjà codé</span>':''}
+          </div>
+          <button class="xpand-btn${hasData?' has-data':''}" id="xb-${t.id}"
+                  onclick="togX('${t.id}',event)">${isOpen?'▲ fermer':'▼ détails'}${hasData?' ●':''}</button>
+        </div>
+        ${t.sub?`<div class="task-sub">${t.sub}</div>`:''}
+        <div class="details-panel${isOpen?' open':''}" id="dp-${t.id}">
+          <div>
+            <div class="dl">📊 Type(s) de graphique</div>
+            <div class="chips">${gChips}</div>
+          </div>
+          <div>
+            <div class="dl">🎯 Priorité</div>
+            <div class="prio-row">${pBtns}</div>
+          </div>
+          <div>
+            <div class="dl">💬 Commentaire</div>
+            <textarea class="cmt" placeholder="Notes, idées, problèmes…"
+                      oninput="setCmt('${t.id}',this.value)">${s.comment}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── actions ──
+function setSt(id,status,e){
+  e.stopPropagation();
+  st[id].status=status;
+  save();
+  const tsk=document.getElementById('tsk-'+id);
+  if(tsk){
+    tsk.className=`task status-${status}`;
+    // update status buttons
+    tsk.querySelectorAll('.s-btn').forEach(b=>{
+      const bs=b.getAttribute('onclick').match(/'(\w+)',event/)?.[1];
+      // simpler: just re-render the task
+    });
+  }
+  render(); // full re-render keeps it simple
+}
+
+function togG(id,gid,e){
+  e.stopPropagation();
+  const arr=st[id].graphs;
+  const i=arr.indexOf(gid);
+  if(i===-1) arr.push(gid); else arr.splice(i,1);
+  save();
+  // update chip
+  const dp=document.getElementById('dp-'+id);
+  if(dp) dp.querySelectorAll('.chip').forEach(c=>{
+    const g=GRAPHS.find(g=>c.textContent.trim().includes(g.lbl));
+    if(g) c.classList.toggle('on',arr.includes(g.id));
+  });
+  refreshXBtn(id);
+}
+
+function setCmt(id,val){
+  st[id].comment=val; save(); refreshXBtn(id);
+}
+
+function setPrio(id,p,e){
+  e.stopPropagation();
+  st[id].priority=p; save();
+  const dp=document.getElementById('dp-'+id);
+  if(dp) dp.querySelectorAll('.prio-btn').forEach(b=>{
+    const bp=b.getAttribute('onclick').match(/'(\w+)',event/)?.[1];
+    if(bp){ b.className='prio-btn'+(st[id].priority===bp?' on-'+bp:''); }
+  });
+}
+
+function togX(id,e){
+  e.stopPropagation();
+  if(xopen.has(id)) xopen.delete(id); else xopen.add(id);
+  const dp=document.getElementById('dp-'+id);
+  if(dp) dp.classList.toggle('open',xopen.has(id));
+  refreshXBtn(id);
+}
+
+function refreshXBtn(id){
+  const btn=document.getElementById('xb-'+id);
+  if(!btn) return;
+  const s=st[id];
+  const hasData=s.graphs.length>0||s.comment.trim().length>0;
+  const open=xopen.has(id);
+  btn.className='xpand-btn'+(hasData?' has-data':'');
+  btn.textContent=(open?'▲ fermer':'▼ détails')+(hasData?' ●':'');
+}
+
+function togSec(id){
+  const sec=document.getElementById('sec-'+id);
+  if(sec) sec.classList.toggle('collapsed');
+}
+
+// ── filters ──
+document.querySelector('.filters').addEventListener('click',e=>{
+  const btn=e.target.closest('.filter-btn');
+  if(!btn) return;
+  filter=btn.dataset.f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

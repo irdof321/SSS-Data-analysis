@@ -532,7 +532,7 @@ readr::write_csv(clean_data, "my_df.csv")
 # ---- Style (colors) ----
 my_fill <- "#2C7FB8"   # blue
 my_border <- NA        # set to "white" if you want a thin border
-
+table_count <- as.integer(1)
 # Helper: save a bar plot of counts (single variable)
 # NOTE: title is now "presentation title" ONLY (no variable name inside)
 save_barplot_counts <- function(df, xvar, title, filename,
@@ -540,7 +540,7 @@ save_barplot_counts <- function(df, xvar, title, filename,
   p <- ggplot(df, aes(x = .data[[xvar]])) +
     geom_bar(fill = my_fill, color = my_border) +
     labs(
-      title = title,
+      title = paste0("Table-", table_count, " ", title),
       x = xlab,
       y = "N respondents"
     ) +
@@ -560,6 +560,7 @@ save_barplot_counts <- function(df, xvar, title, filename,
     plot = p,
     width = 12, height = 6, dpi = 300
   )
+  table_count <<- table_count + 1
 }
 
 # Helper: numeric binning plot (counts)
@@ -597,7 +598,7 @@ save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL,
   p <- ggplot(tmp, aes(x = bin)) +
     geom_bar(fill = my_fill, color = my_border) +
     labs(
-      title = title,
+      title = paste0("Table-", table_count, " ", title),
       x = xlab,
       y = "N respondents"
     ) +
@@ -614,6 +615,7 @@ save_binned_counts <- function(df, numvar, breaks, title, filename, xlab = NULL,
     plot = p,
     width = 12, height = 6, dpi = 300
   )
+  table_count <<- table_count + 1
 }
 
 
@@ -633,7 +635,7 @@ save_topn_barplot <- function(df, xvar, n_top, title, filename, xlab = NULL) {
   p <- ggplot(tmp, aes(x = group, y = n)) +
     geom_col(fill = my_fill, color = my_border) +
     coord_flip() +
-    labs(title = title, x = xlab, y = "N respondents") +
+    labs(title = paste0("Table-", table_count, " ", title), x = xlab, y = "N respondents") +
     theme_minimal(base_size = 12) +
     theme(
       plot.title = element_text(face = "bold"),
@@ -646,6 +648,7 @@ save_topn_barplot <- function(df, xvar, n_top, title, filename, xlab = NULL) {
     plot = p,
     width = 12, height = 7, dpi = 300
   )
+  table_count <<- table_count + 1
 }
 
 # Helper: donut plot with legend on the side (stable palette + fixed legend key size)
@@ -681,7 +684,7 @@ save_donut_counts <- function(df, xvar, title, filename,
     geom_col(width = 0.9, color = "white") +
     coord_polar(theta = "y") +
     xlim(0.5, 2.6) +
-    labs(title = title, fill = NULL) +
+    labs(title = paste0("Table-", table_count, " ", title), fill = NULL) +
     theme_void(base_size = 12) +
     theme(
       plot.title = element_text(face = "bold", hjust = 0.5),
@@ -715,6 +718,7 @@ save_donut_counts <- function(df, xvar, title, filename,
   
   print(p)
   ggsave(file.path(out_dir, filename), p, width = 12, height = 6, dpi = 300)
+  table_count <<- table_count + 1
 }
 
 # Histogram helper
@@ -728,7 +732,7 @@ save_hist_counts <- function(df, numvar, title, filename,
   p <- ggplot(tmp, aes(x = .data[[numvar]])) +
     { if (!is.null(binwidth)) geom_histogram(binwidth = binwidth, fill = my_fill, color = my_border)
       else geom_histogram(bins = bins, fill = my_fill, color = my_border) } +
-    labs(title = title, x = xlab, y = "N respondents") +
+    labs(title = paste0("Table-", table_count, " ", title), x = xlab, y = "N respondents") +
     theme_minimal(base_size = 12) +
     theme(
       plot.title = element_text(face = "bold"),
@@ -737,6 +741,7 @@ save_hist_counts <- function(df, numvar, title, filename,
   
   print(p)
   ggsave(file.path(out_dir, filename), p, width = 12, height = 6, dpi = 300)
+  table_count <<- table_count + 1
 }
 
 
@@ -824,13 +829,14 @@ p_sss_cross <- ggplot(df_sss, aes(x = sssmember, y = ssstime, fill = n)) +
   geom_tile(color = "white") +
   geom_text(aes(label = n), size = 3.5, color = "white") +
   scale_fill_gradient(low = "#1a2a3a", high = my_fill) +
-  labs(title = "SSS time × involvement", x = NULL, y = NULL, fill = "N") +
+  labs(title = paste("Table-",table_count," ","SSS time × involvement"), x = NULL, y = NULL, fill = "N") +
   theme_minimal(base_size = 12) +
   theme(plot.title = element_text(face = "bold"))
 
 print(p_sss_cross)
 ggsave(file.path(out_dir, "sss_time_by_involvement.png"),
        p_sss_cross, width = 10, height = 5, dpi = 300)
+table_count <<- table_count + 1
 
 # 9) Education level
 save_barplot_counts(clean_data, "trlvl", "Education level", "basic_education_level.png",
@@ -852,7 +858,7 @@ p_tf <- df_tf %>%
   ggplot(aes(x = training_field, y = n)) +
   geom_col(fill = my_fill, color = my_border) +
   labs(
-    title = "Training fields (multiple answers allowed)",
+    title = paste("Table-",table_count," ","Training fields (multiple answers allowed)"),
     x = NULL,
     y = "N respondents (selections)"
   ) +
@@ -869,6 +875,7 @@ ggsave(
   plot = p_tf,
   width = 14, height = 7, dpi = 300
 )
+table_count <<- table_count + 1
 
 # 12) Continuous education
 clean_data$continuous_education <- fct_relabel(
@@ -929,7 +936,7 @@ p_sector <- clean_data %>%
   mutate(plsector_wrap = stringr::str_wrap(as.character(plsector), width = 22)) %>%
   ggplot(aes(x = plsector_wrap)) +
   geom_bar(fill = my_fill, color = my_border) +
-  labs(title = "Sector", x = NULL, y = "N respondents") +
+  labs(title = paste("Table-",table_count," ","Sector"), x = NULL, y = "N respondents") +
   theme_minimal(base_size = 11) +
   theme(
     plot.title = element_text(face = "bold"),
@@ -943,6 +950,7 @@ ggsave(
   plot = p_sector,
   width = 18, height = 9, dpi = 300
 )
+table_count <<- table_count + 1
 
 
 # 18) # Years of experience (plyexp): often integer years
@@ -1056,7 +1064,7 @@ p_satisf2 <- ggplot(df_div, aes(x = pct_directed, y = item, fill = label)) +
     limits = c(-1, 1)
   ) +
   labs(
-    title = "Job satisfaction — detailed items",
+    title = paste("Table-",table_count," ","Job satisfaction — detailed items"),
     x = NULL, y = NULL, fill = NULL
   ) +
   theme_minimal(base_size = 11) +
@@ -1072,6 +1080,7 @@ ggsave(
   file.path(out_dir, "satisf2_diverging.png"),
   p_satisf2, width = 13, height = 7, dpi = 300
 )
+table_count <<- table_count + 1
 
 # ── Compétences (skills) ──
 
@@ -1088,7 +1097,7 @@ p_skills <- df_skills %>%
   ggplot(aes(x = n, y = skill)) +
   geom_col(fill = my_fill, color = my_border) +
   labs(
-    title = "Work-related skills (multiple answers allowed)",
+    title = paste("Table-",table_count," ","Work-related skills (multiple answers allowed)"),
     x = "N respondents", y = NULL
   ) +
   theme_minimal(base_size = 12) +
@@ -1099,6 +1108,7 @@ p_skills <- df_skills %>%
 
 print(p_skills)
 ggsave(file.path(out_dir, "basic_skills.png"), p_skills, width = 11, height = 6, dpi = 300)
+table_count <<- table_count + 1
 
 # 3) Co-occurrence — quelles compétences vont ensemble
 skill_wide <- clean_data %>%
@@ -1129,7 +1139,7 @@ p_cooc <- ggplot(cooc_df, aes(x = skill1, y = skill2, fill = n)) +
   geom_tile(color = "white") +
   geom_text(aes(label = n), size = 3.5, color = "white") +
   scale_fill_gradient(low = "#1a2a3a", high = my_fill, na.value = "grey20") +
-  labs(title = "Skills co-occurrence", x = NULL, y = NULL, fill = "N") +
+  labs(title = paste("Table-",table_count," ","Skills co-occurrence"), x = NULL, y = NULL, fill = "N") +
   theme_minimal(base_size = 11) +
   theme(
     plot.title = element_text(face = "bold"),
@@ -1139,6 +1149,7 @@ p_cooc <- ggplot(cooc_df, aes(x = skill1, y = skill2, fill = n)) +
 
 print(p_cooc)
 ggsave(file.path(out_dir, "skills_cooccurrence.png"), p_cooc, width = 9, height = 7, dpi = 300)
+table_count <<- table_count + 1
 
 # ── Setup commun ──
 df_us <- clean_data %>%
@@ -1176,7 +1187,7 @@ p_imp <- ggplot(df_imp, aes(x = pct, y = theme, fill = importance)) +
     "Important"            = "#6dbe8d",
     "Very important"       = "#1a7a4a"
   )) +
-  labs(title = "Importance of statistical activities",
+  labs(title = paste("Table-",table_count," ","Importance of statistical activities"),
        x = NULL, y = NULL, fill = NULL) +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold"),
@@ -1186,6 +1197,7 @@ p_imp <- ggplot(df_imp, aes(x = pct, y = theme, fill = importance)) +
 
 print(p_imp)
 ggsave(file.path(out_dir, "ustime_importance.png"), p_imp, width = 12, height = 6, dpi = 300)
+table_count <<- table_count + 1
 
 # ── Graphique 2 : Implication — même structure ──
 
@@ -1210,7 +1222,7 @@ p_inv <- ggplot(df_inv, aes(x = pct, y = theme, fill = involvement)) +
     "Supervision"                     = "#6dbe8d",
     "Direct practice and supervision" = "#1a4a7a"
   )) +
-  labs(title = "Involvement in statistical activities",
+  labs(title = paste("Table-",table_count," ","Involvement in statistical activities"),
        x = NULL, y = NULL, fill = NULL) +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold"),
@@ -1220,6 +1232,7 @@ p_inv <- ggplot(df_inv, aes(x = pct, y = theme, fill = involvement)) +
 
 print(p_inv)
 ggsave(file.path(out_dir, "ustime_involvement.png"), p_inv, width = 12, height = 6, dpi = 300)
+table_count <<- table_count + 1
 
 
 # ── Graphique 3 : Vue combinée — importance moyenne vs % actifs ──
@@ -1244,7 +1257,7 @@ p_bubble <- ggplot(df_bubble,
   ) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
   labs(
-    title = "Statistical activities — importance vs active use",
+    title = paste("Table-",table_count," ","Statistical activities — importance vs active use"),
     x = "Mean importance score",
     y = "% respondents actively involved"
   ) +
@@ -1254,6 +1267,7 @@ p_bubble <- ggplot(df_bubble,
 
 print(p_bubble)
 ggsave(file.path(out_dir, "ustime_bubble.png"), p_bubble, width = 11, height = 7, dpi = 300)
+table_count <<- table_count + 1
 ############################## ADD above
 
 
@@ -1295,7 +1309,7 @@ p_gender_by_field <- ggplot(df_plot, aes(x = training_field, y = pct, fill = dmg
     drop = FALSE
   ) +
   labs(
-    title = "Gender distribution by training field",
+    title = paste("Table-",table_count," ","Gender distribution by training field"),
     x = "Training field",
     y = "Share within field",
     fill = "Gender"
@@ -1307,6 +1321,7 @@ p_gender_by_field <- ggplot(df_plot, aes(x = training_field, y = pct, fill = dmg
   )
 
 print(p_gender_by_field)
+table_count <<- table_count + 1
 
 # 4) Save (keeps your export logic)
 ggsave(
@@ -1338,7 +1353,7 @@ p_loc_gender <- ggplot(df_loc_gender,
     drop = FALSE
   ) +
   labs(
-    title = "Gender distribution by study location",
+    title = paste("Table-",table_count," ","Gender distribution by study location"),
     x = NULL, y = "Share within location", fill = "Gender"
   ) +
   theme_minimal(base_size = 12) +
@@ -1352,7 +1367,7 @@ p_loc_gender <- ggplot(df_loc_gender,
 print(p_loc_gender)
 ggsave(file.path(out_dir, "gender_by_study_location.png"),
        p_loc_gender, width = 12, height = 6, dpi = 300)
-
+table_count <<- table_count + 1
 # ── Niveau de diplôme × Genre ──
 
 df_edu_gender <- clean_data %>%
@@ -1376,7 +1391,7 @@ p_edu_gender <- ggplot(df_edu_gender,
     drop = FALSE
   ) +
   labs(
-    title = "Gender distribution by education level",
+    title = paste("Table-",table_count," ","Gender distribution by education level"),
     x = NULL, y = "Share within level", fill = "Gender"
   ) +
   theme_minimal(base_size = 12) +
@@ -1390,7 +1405,7 @@ p_edu_gender <- ggplot(df_edu_gender,
 print(p_edu_gender)
 ggsave(file.path(out_dir, "gender_by_education_level.png"),
        p_edu_gender, width = 12, height = 6, dpi = 300)
-
+table_count <<- table_count + 1
 # ── Domaine de formation × Lieu d'études ──
 
 df_field_loc <- clean_data %>%
@@ -1410,7 +1425,7 @@ p_field_loc <- ggplot(df_field_loc,
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_brewer(palette = "Set2", drop = FALSE) +
   labs(
-    title = "Study location by training field",
+    title = paste("Table-",table_count," ","Study location by training field"),
     x = NULL, y = "Share within field", fill = "Study location"
   ) +
   theme_minimal(base_size = 11) +
@@ -1424,6 +1439,7 @@ p_field_loc <- ggplot(df_field_loc,
 print(p_field_loc)
 ggsave(file.path(out_dir, "study_location_by_training_field.png"),
        p_field_loc, width = 14, height = 7, dpi = 300)
+table_count <<- table_count + 1
 
 # ── Séniorité × Niveau de diplôme — 3 versions ──
 
@@ -1439,7 +1455,7 @@ p_sen_edu_1 <- ggplot(df_sen_edu, aes(x = plsenior, y = pct, fill = trlvl)) +
   geom_col(position = position_dodge2(preserve = "single"), width = 0.8) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_brewer(palette = "Blues", drop = FALSE) +
-  labs(title = "Seniority level by education level — grouped bar",
+  labs(title = paste("Table-",table_count," ","Seniority level by education level — grouped bar"),
        x = NULL, y = "Share within education level", fill = "Education") +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold"),
@@ -1449,13 +1465,14 @@ p_sen_edu_1 <- ggplot(df_sen_edu, aes(x = plsenior, y = pct, fill = trlvl)) +
 print(p_sen_edu_1)
 ggsave(file.path(out_dir, "seniority_by_education_v1_grouped.png"),
        p_sen_edu_1, width = 13, height = 7, dpi = 300)
+table_count <<- table_count + 1
 
 # Option 2 — Stacked bar 100%
 p_sen_edu_2 <- ggplot(df_sen_edu, aes(x = trlvl, y = pct, fill = plsenior)) +
   geom_col(width = 0.8) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_brewer(palette = "RdYlGn", direction = -1, drop = FALSE) +
-  labs(title = "Seniority level by education level — stacked bar",
+  labs(title = paste("Seniority level by education level — stacked bar"),
        x = NULL, y = "Share within education level", fill = "Seniority") +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold"),
@@ -1471,7 +1488,7 @@ p_sen_edu_3 <- ggplot(df_sen_edu, aes(x = plsenior, y = pct)) +
   geom_col(fill = my_fill, width = 0.7) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   facet_wrap(~ trlvl, nrow = 2) +
-  labs(title = "Seniority level by education level — facet",
+  labs(title = paste("Table-",table_count," ","Seniority level by education level — facet"),
        x = NULL, y = NULL) +
   theme_minimal(base_size = 10) +
   theme(plot.title = element_text(face = "bold"),
@@ -1481,7 +1498,7 @@ p_sen_edu_3 <- ggplot(df_sen_edu, aes(x = plsenior, y = pct)) +
 print(p_sen_edu_3)
 ggsave(file.path(out_dir, "seniority_by_education_v3_facet.png"),
        p_sen_edu_3, width = 14, height = 8, dpi = 300)
-
+table_count <<- table_count + 1
 
 # ══════════════════════════════════════════════════════
 # Activity-based job profiles
@@ -1569,7 +1586,7 @@ p_role_profile <- ggplot(df_role_profile, aes(x = n, y = job_role)) +
   geom_col(fill = my_fill, color = my_border) +
   facet_wrap(~ job_profile, scales = "free_y", ncol = 2) +
   labs(
-    title = "[TBD] Top job roles by activity-based profile",
+    title = paste("Table-",table_count," ","[TBD] Top job roles by activity-based profile"),
     subtitle = "Rules-based profiles — to be validated on real data",
     x = "N respondents", y = NULL
   ) +
@@ -1584,6 +1601,7 @@ p_role_profile <- ggplot(df_role_profile, aes(x = n, y = job_role)) +
 print(p_role_profile)
 ggsave(file.path(out_dir, "jobrole_by_profile_TBD.png"),
        p_role_profile, width = 14, height = 10, dpi = 300)
+table_count <<- table_count + 1
 
 
 # ══════════════════════════════════════════════════════
@@ -1621,7 +1639,7 @@ for (loc in levels(df_field_gender_loc$study_location)) {
       drop = FALSE
     ) +
     labs(
-      title = paste0("Gender by training field — ", loc),
+      title = paste0("Table-",table_count," ","Gender by training field — ", loc),
       x = NULL, y = "Share within field", fill = "Gender"
     ) +
     theme_minimal(base_size = 11) +
@@ -1635,6 +1653,7 @@ for (loc in levels(df_field_gender_loc$study_location)) {
   safe_loc <- gsub("[^A-Za-z0-9]+", "_", loc)
   ggsave(file.path(out_dir, paste0("field_gender_loc_", safe_loc, ".png")),
          p_g1, width = 14, height = 7, dpi = 300)
+  table_count <<- table_count + 1
 }
 
 # ── Graphique 2 : un fichier par genre ──
@@ -1654,7 +1673,7 @@ for (gen in levels(df_field_gender_loc$dmgender)) {
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     scale_fill_brewer(palette = "Set2", drop = FALSE) +
     labs(
-      title = paste0("Study location by training field — ", gen),
+      title = paste0("Table-",table_count," ","Study location by training field — ", gen),
       x = NULL, y = "Share within field", fill = "Study location"
     ) +
     theme_minimal(base_size = 11) +
@@ -1668,6 +1687,7 @@ for (gen in levels(df_field_gender_loc$dmgender)) {
   safe_gen <- gsub("[^A-Za-z0-9]+", "_", gen)
   ggsave(file.path(out_dir, paste0("field_location_gender_", safe_gen, ".png")),
          p_g2, width = 14, height = 7, dpi = 300)
+  table_count <<- table_count + 1
 }
 
 # ── Importance activités statistiques — overall + par secteur ──
@@ -1707,7 +1727,7 @@ plot_importance <- function(data, title) {
     geom_col(width = 0.7) +
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
     scale_fill_manual(values = importance_palette, drop = FALSE) +
-    labs(title = title, x = NULL, y = NULL, fill = NULL) +
+    labs(title = paste("Table-",table_count," ",title), x = NULL, y = NULL, fill = NULL) +
     theme_minimal(base_size = 11) +
     theme(
       plot.title = element_text(face = "bold"),
@@ -1715,6 +1735,7 @@ plot_importance <- function(data, title) {
       legend.position = "bottom"
     ) +
     guides(fill = guide_legend(nrow = 1))
+  table_count <<- table_count + 1
 }
 
 # 1) Overall
@@ -1733,14 +1754,14 @@ for (sec in levels(df_us$plsector)) {
   
   p_sec <- plot_importance(
     df_sec,
-    paste0("Importance of statistical activities — ", sec, " (n=", n_resp, ")")
+    paste0("Table-",table_count," ","Importance of statistical activities — ", sec, " (n=", n_resp, ")")
   )
   
   safe_sec <- gsub("[^A-Za-z0-9]+", "_", sec)
   ggsave(file.path(out_dir, paste0("ustime_importance_sector_", safe_sec, ".png")),
          p_sec, width = 12, height = 6, dpi = 300)
+  table_count <<- table_count + 1
 }
-
 
 # ── Séniorité et expérience par secteur ──
 df_sector <- clean_data %>%
@@ -1768,7 +1789,7 @@ p_exp_sector <- df_sector %>%
   geom_boxplot(fill = my_fill, color = "grey30",
                alpha = 0.7, outlier.size = 1.5) +
   labs(
-    title = "Years of experience by sector",
+    title = paste("Table-",table_count," ","Years of experience by sector"),
     x = "Years of experience", y = NULL
   ) +
   theme_minimal(base_size = 11) +
@@ -1780,7 +1801,7 @@ p_exp_sector <- df_sector %>%
 print(p_exp_sector)
 ggsave(file.path(out_dir, "experience_by_sector.png"),
        p_exp_sector, width = 12, height = 10, dpi = 300)
-
+table_count <<- table_count + 1
 # ── Graphique 2 : Séniorité par secteur — stacked bar 100% ──
 # Trié par % top management + middle management
 
@@ -1814,7 +1835,7 @@ p_sen_sector <- df_sector %>%
                      limits = c(0, 1)) +
   scale_fill_manual(values = seniority_palette, drop = FALSE) +
   labs(
-    title = "Seniority level by sector",
+    title = paste("Table-",table_count," ","Seniority level by sector"),
     x = NULL, y = NULL, fill = NULL
   ) +
   theme_minimal(base_size = 11) +
@@ -1828,7 +1849,7 @@ p_sen_sector <- df_sector %>%
 print(p_sen_sector)
 ggsave(file.path(out_dir, "seniority_by_sector.png"),
        p_sen_sector, width = 13, height = 10, dpi = 300)
-
+table_count <<- table_count + 1
 
 
 # ══════════════════════════════════════════════════════
@@ -1848,12 +1869,12 @@ cont_edu_palette <- c(
 # ── 1) Overall ──
 save_donut_counts(
   clean_data, "continuous_education",
-  title    = "Continuous education — overall",
+  title    = paste("Table-",table_count," ","Continuous education — overall"),
   filename = "cont_edu_overall.png",
   palette  = cont_edu_palette,
   drop_na  = TRUE
 )
-
+table_count <<- table_count + 1
 # ── 2) Par secteur ──
 df_cont_sector <- clean_data %>%
   mutate(plsector = as.character(plsector)) %>%
@@ -1868,11 +1889,12 @@ for (sec in levels(df_cont_sector$plsector)) {
   safe_sec <- gsub("[^A-Za-z0-9]+", "_", sec)
   save_donut_counts(
     df_sec, "continuous_education",
-    title    = paste0("Continuous education — ", sec, " (n=", nrow(df_sec), ")"),
+    title    = paste0("Table-",table_count," ","Continuous education — ", sec, " (n=", nrow(df_sec), ")"),
     filename = paste0("cont_edu_sector_", safe_sec, ".png"),
     palette  = cont_edu_palette,
     drop_na  = TRUE
   )
+  table_count <<- table_count + 1
 }
 
 # ── 3) Par séniorité ──
@@ -1889,11 +1911,12 @@ for (sen in levels(df_cont_senior$plsenior)) {
   safe_sen <- gsub("[^A-Za-z0-9]+", "_", sen)
   save_donut_counts(
     df_sen, "continuous_education",
-    title    = paste0("Continuous education — ", sen, " (n=", nrow(df_sen), ")"),
+    title    = paste0("Table-",table_count," ","Continuous education — ", sen, " (n=", nrow(df_sen), ")"),
     filename = paste0("cont_edu_seniority_", safe_sen, ".png"),
     palette  = cont_edu_palette,
     drop_na  = TRUE
   )
+  table_count <<- table_count + 1
 }
 
 # ── 4) Par expérience ──
@@ -1912,9 +1935,10 @@ for (grp in levels(df_cont_exp$exp_group)) {
   safe_grp <- gsub("[^A-Za-z0-9]+", "_", grp)
   save_donut_counts(
     df_grp, "continuous_education",
-    title    = paste0("Continuous education — ", grp, " (n=", nrow(df_grp), ")"),
+    title    = paste0("Table-",table_count," ","Continuous education — ", grp, " (n=", nrow(df_grp), ")"),
     filename = paste0("cont_edu_exp_", safe_grp, ".png"),
     palette  = cont_edu_palette,
     drop_na  = TRUE
   )
+  table_count <<- table_count + 1
 }

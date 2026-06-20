@@ -4,7 +4,7 @@
 # ══════════════════════════════════════════════════════════════════
 library(gt)
 
-tables_dir <- file.path(out_dir, "tables")
+tables_dir <- tab_dir
 if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
 
 # ── Style commun ─────────────────────────────────────────────────
@@ -20,18 +20,14 @@ style_table <- function(gt_obj, title, subtitle = NULL) {
       subtitle = if (!is.null(subtitle)) md(paste0("*", subtitle, "*"))
     ) |>
     tab_options(
-      table.font.size        = px(13),
-      heading.title.font.size = px(16),
+      table.font.size            = px(13),
+      heading.title.font.size    = px(16),
       heading.subtitle.font.size = px(12),
       heading.background.color   = sss_dark,
-      heading.title.font.color   = "white",
-      heading.subtitle.font.color = "#c0d8ef",
       column_labels.background.color = sss_blue,
-      column_labels.font.color   = "white",
       column_labels.font.weight  = "bold",
       column_labels.font.size    = px(13),
       row.striping.background_color = sss_lightgrey,
-      row.striping.include_body  = TRUE,
       table.border.top.color     = sss_dark,
       table.border.top.width     = px(3),
       table.border.bottom.color  = sss_dark,
@@ -86,7 +82,7 @@ make_freq_table <- function(df, var, title, filename,
     cols_align(align = "right", columns = c(N, `%`, Cum., `Cum.%`)) |>
     tab_style(
       style     = cell_fill(color = sss_light),
-      locations = cells_body(rows = seq(1, nrow(tab), by = 2))
+      locations = cells_body(rows = which(seq_len(nrow(tab)) %% 2 == 1))
     ) |>
     style_table(title = title, subtitle = subtitle) |>
     grand_summary_rows(
@@ -102,74 +98,74 @@ make_freq_table <- function(df, var, title, filename,
 # Gender
 make_freq_table(clean_data, "dmgender",
                 "Gender distribution",
-                "freq_gender.html")
+                "freq_gender.png")
 
 # Origin
 make_freq_table(clean_data, "origin",
                 "Country of origin",
-                "freq_origin.html")
+                "freq_origin.png")
 
 # Canton of residence
 make_freq_table(clean_data, "dmres",
                 "Canton of residence",
-                "freq_residency.html")
+                "freq_residency.png")
 
 # Work location
 make_freq_table(clean_data, "dmwork",
                 "Work location (canton)",
-                "freq_work_location.html")
+                "freq_work_location.png")
 
 # SSS awareness
 make_freq_table(clean_data, "sssknow",
                 "SSS awareness",
-                "freq_sss_awareness.html")
+                "freq_sss_awareness.png")
 
 # SSS involvement
 make_freq_table(clean_data, "sssmember",
                 "SSS involvement level",
-                "freq_sss_involvement.html")
+                "freq_sss_involvement.png")
 
 # SSS membership duration
 make_freq_table(clean_data, "ssstime",
                 "SSS membership duration",
-                "freq_sss_time.html")
+                "freq_sss_time.png")
 
 # Education level
 make_freq_table(clean_data, "trlvl",
                 "Highest education level",
-                "freq_education_level.html")
+                "freq_education_level.png")
 
 # Study location
 make_freq_table(clean_data, "study_location",
                 "Study location",
-                "freq_study_location.html")
+                "freq_study_location.png")
 
 # Continuous education
 make_freq_table(clean_data, "continuous_education",
                 "Continuous education",
-                "freq_continuous_education.html",
+                "freq_continuous_education.png",
                 wrap_width = 40)
 
 # Employment status
 make_freq_table(clean_data, "job_status",
                 "Employment status",
-                "freq_employment_status.html")
+                "freq_employment_status.png")
 
 # Sector
 make_freq_table(clean_data, "plsector",
                 "Job sector",
-                "freq_sector.html",
+                "freq_sector.png",
                 wrap_width = 35)
 
 # Seniority level
 make_freq_table(clean_data, "plsenior",
                 "Seniority level",
-                "freq_seniority.html")
+                "freq_seniority.png")
 
 # Work satisfaction
 make_freq_table(clean_data, "worksatisfction",
                 "Overall work satisfaction",
-                "freq_work_satisfaction.html")
+                "freq_work_satisfaction.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  B) TRAINING FIELDS — multi-réponse
@@ -200,7 +196,7 @@ gt_tf <- df_tf_tab |>
     subtitle = "Multiple selections allowed"
   )
 
-save_gt(gt_tf, "freq_training_fields.html")
+save_gt(gt_tf, "freq_training_fields.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  C) SKILLS — multi-réponse
@@ -230,7 +226,7 @@ gt_sk <- df_sk_tab |>
     subtitle = "Multiple selections allowed"
   )
 
-save_gt(gt_sk, "freq_skills.html")
+save_gt(gt_sk, "freq_skills.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  D) DESCRIPTIVE STATS — variables numériques
@@ -281,7 +277,7 @@ gt_desc <- df_desc |>
     subtitle = "Salary normalized to 100% workload"
   )
 
-save_gt(gt_desc, "desc_numerical.html")
+save_gt(gt_desc, "desc_numerical.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  E) CROSS-TABLES
@@ -316,7 +312,7 @@ gt_cross1 <- df_cross1 |>
     subtitle = "Cross-tabulation (counts)"
   )
 
-save_gt(gt_cross1, "cross_gender_education.html")
+save_gt(gt_cross1, "cross_gender_education.png")
 
 # ── E2) Education level × Seniority ──────────────────────────────
 df_cross2 <- clean_data |>
@@ -347,7 +343,7 @@ gt_cross2 <- df_cross2 |>
     subtitle = "Cross-tabulation (counts)"
   )
 
-save_gt(gt_cross2, "cross_education_seniority.html")
+save_gt(gt_cross2, "cross_education_seniority.png")
 
 # ── E3) SSS involvement × membership duration ────────────────────
 df_cross3 <- clean_data |>
@@ -378,7 +374,7 @@ gt_cross3 <- df_cross3 |>
     subtitle = "Cross-tabulation (counts)"
   )
 
-save_gt(gt_cross3, "cross_sss_involvement_time.html")
+save_gt(gt_cross3, "cross_sss_involvement_time.png")
 
 # ── E4) Gender × Sector (top 15) ─────────────────────────────────
 top_sectors <- clean_data |>
@@ -416,7 +412,7 @@ gt_cross4 <- df_cross4 |>
     subtitle = "Top 15 sectors (counts)"
   )
 
-save_gt(gt_cross4, "cross_gender_sector.html")
+save_gt(gt_cross4, "cross_gender_sector.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  F) SATISFACTION DETAILED — Likert summary table
@@ -468,7 +464,7 @@ gt_sat <- df_sat_summary |>
     subtitle = "Ranked by proportion of satisfied respondents"
   )
 
-save_gt(gt_sat, "satisfaction_detail.html")
+save_gt(gt_sat, "satisfaction_detail.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  G) STATISTICAL ACTIVITIES — Importance summary
@@ -521,7 +517,7 @@ gt_act <- df_act_summary |>
     subtitle = "Sorted by perceived importance"
   )
 
-save_gt(gt_act, "activities_summary.html")
+save_gt(gt_act, "activities_summary.png")
 
 # ══════════════════════════════════════════════════════════════════
 #  H) SALARY BY SECTOR — summary stats
@@ -570,6 +566,6 @@ gt_sal <- df_sal_sector |>
     subtitle = "Normalized to 100% workload — sectors with n ≥ 5"
   )
 
-save_gt(gt_sal, "salary_by_sector.html")
+save_gt(gt_sal, "salary_by_sector.png")
 
 message("✔ 06_tables.R terminé — tables dans ", tables_dir)

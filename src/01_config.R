@@ -14,6 +14,8 @@ library(scales)
 library(readr)
 library(ggrepel)
 library(stringr)
+library(gt)
+library(webshot2)   # backend utilisé par gt::gtsave() pour exporter en PNG
 
 ####################################################################
 #  Parameters
@@ -27,10 +29,13 @@ REMOVE_NOT_SUB <- FALSE   # remove rows without a submitted date
 ref_year <- 2026
 
 ####################################################################
-#  Output directory
+#  Output directories
 ####################################################################
 out_dir <- "descriptives_plots"
 if (!dir.exists(out_dir)) dir.create(out_dir)
+
+tab_dir <- "descriptives_tables"
+if (!dir.exists(tab_dir)) dir.create(tab_dir)
 
 ####################################################################
 #  Style
@@ -40,6 +45,15 @@ my_border <- NA
 
 # Counter — global, incrémenté par les helpers
 table_count <- as.integer(1)
+
+####################################################################
+#  Table styling (gt) — identité visuelle des tableaux
+####################################################################
+tab_accent     <- "#2C7FB8"   # couleur d'accent (cohérente avec my_fill)
+tab_accent_dk  <- "#1a4a7a"   # variante foncée (en-tête)
+tab_stripe     <- "#EAF2F8"   # bandes zébrées très légères
+tab_border     <- "#D9E2EC"   # lignes fines
+tab_font       <- "Arial"     # police (fallback système si absente)
 
 ####################################################################
 #  Factor level definitions (shared across cleaning + plots)

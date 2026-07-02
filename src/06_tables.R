@@ -1,11 +1,15 @@
 # ══════════════════════════════════════════════════════════════════
 #  06_tables.R — Tables descriptives pour le rapport
-#  Dépend de : 01_config.R, 02_cleaning.R, 03_helpers.R
+#  Dépend de : 01_config.R, 02_cleaning.R (+ variables dérivées),
+#              03_helpers.R
+#
+#  Protocole §5 : toutes les variables (5.1) + dérivées (5.2) sont
+#  présentées pour la population complète ET pour les membres SSS.
+#  → generate_tables() est appelée 2× :
+#      descriptives_tables/full_population/
+#      descriptives_tables/sss_members/
 # ══════════════════════════════════════════════════════════════════
 library(gt)
-
-tables_dir <- tab_dir
-if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
 
 # ── Style commun ─────────────────────────────────────────────────
 sss_blue      <- "#2C7FB8"
@@ -13,11 +17,21 @@ sss_dark      <- "#1a3a5c"
 sss_light     <- "#eaf2fa"
 sss_lightgrey <- "#f7f8fa"
 
+# NOTE: pop_n / pop_label sont des globals mis à jour par generate_tables()
+# pour que la source note affiche le bon n selon la population courante.
+pop_n     <- NA_integer_
+pop_label <- ""
+tables_dir <- ""   # défini par generate_tables()
+
 style_table <- function(gt_obj, title, subtitle = NULL) {
+  sub_full <- paste0(
+    if (!is.null(subtitle)) paste0(subtitle, " — ") else "",
+    pop_label
+  )
   gt_obj |>
     tab_header(
       title    = md(paste0("**", title, "**")),
-      subtitle = if (!is.null(subtitle)) md(paste0("*", subtitle, "*"))
+      subtitle = md(paste0("*", sub_full, "*"))
     ) |>
     tab_options(
       table.font.size            = px(13),
@@ -40,7 +54,7 @@ style_table <- function(gt_obj, title, subtitle = NULL) {
     ) |>
     tab_source_note(
       source_note = md(paste0(
-        "SSS Survey — *n* = ", nrow(clean_data),
+        "SSS Survey — *n* = ", pop_n,
         " | Generated ", Sys.Date()
       ))
     ) |>
@@ -53,16 +67,19 @@ save_gt <- function(gt_obj, filename) {
   message("  → ", path)
 }
 
-# ══════════════════════════════════════════════════════════════════
-#  A) FREQUENCY TABLES — variables catégorielles
-# ══════════════════════════════════════════════════════════════════
-
+# ── Frequency table — variables catégorielles ────────────────────
 make_freq_table <- function(df, var, title, filename,
-                            subtitle = NULL, wrap_width = NULL) {
+                            subtitle = NULL, wrap_width = NULL,
+                            order_by = c("freq", "level")) {
+  order_by <- match.arg(order_by)
+  
   tab <- df |>
     filter(!is.na(.data[[var]]), as.character(.data[[var]]) != "") |>
-    count(.data[[var]], name = "N") |>
-    arrange(desc(N)) |>
+    count(.data[[var]], name = "N")
+  
+  if (order_by == "freq") tab <- tab |> arrange(desc(N))
+  
+  tab <- tab |>
     mutate(
       `%`     = N / sum(N),
       Cum.    = cumsum(N),
@@ -95,477 +112,552 @@ make_freq_table <- function(df, var, title, filename,
   gt_obj
 }
 
-# Gender
-make_freq_table(clean_data, "dmgender",
-                "Gender distribution",
-                "freq_gender.png")
-
-# Origin
-make_freq_table(clean_data, "origin",
-                "Country of origin",
-                "freq_origin.png")
-
-# Canton of residence
-make_freq_table(clean_data, "dmres",
-                "Canton of residence",
-                "freq_residency.png")
-
-# Work location
-make_freq_table(clean_data, "dmwork",
-                "Work location (canton)",
-                "freq_work_location.png")
-
-# SSS awareness
-make_freq_table(clean_data, "sssknow",
-                "SSS awareness",
-                "freq_sss_awareness.png")
-
-# SSS involvement
-make_freq_table(clean_data, "sssmember",
-                "SSS involvement level",
-                "freq_sss_involvement.png")
-
-# SSS membership duration
-make_freq_table(clean_data, "ssstime",
-                "SSS membership duration",
-                "freq_sss_time.png")
-
-# Education level
-make_freq_table(clean_data, "trlvl",
-                "Highest education level",
-                "freq_education_level.png")
-
-# Study location
-make_freq_table(clean_data, "study_location",
-                "Study location",
-                "freq_study_location.png")
-
-# Continuous education
-make_freq_table(clean_data, "continuous_education",
-                "Continuous education",
-                "freq_continuous_education.png",
-                wrap_width = 40)
-
-# Employment status
-make_freq_table(clean_data, "job_status",
-                "Employment status",
-                "freq_employment_status.png")
-
-# Sector
-make_freq_table(clean_data, "plsector",
-                "Job sector",
-                "freq_sector.png",
-                wrap_width = 35)
-
-# Seniority level
-make_freq_table(clean_data, "plsenior",
-                "Seniority level",
-                "freq_seniority.png")
-
-# Work satisfaction
-make_freq_table(clean_data, "worksatisfction",
-                "Overall work satisfaction",
-                "freq_work_satisfaction.png")
-
 # ══════════════════════════════════════════════════════════════════
-#  B) TRAINING FIELDS — multi-réponse
+#  GÉNÉRATEUR — toutes les tables pour une population donnée
 # ══════════════════════════════════════════════════════════════════
-df_tf_tab <- clean_data |>
-  tidyr::unnest_longer(training_fields_list, values_to = "training_field") |>
-  filter(!is.na(training_field), training_field != "") |>
-  count(training_field, name = "Selections") |>
-  arrange(desc(Selections)) |>
-  mutate(
-    `% of respondents` = Selections / nrow(clean_data)
+generate_tables <- function(df, label, subdir) {
+  
+  # globals utilisés par style_table / save_gt
+  pop_n      <<- nrow(df)
+  pop_label  <<- label
+  tables_dir <<- file.path(tab_dir, subdir)
+  if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
+  
+  message("── Population : ", label, " (n=", nrow(df), ") ──")
+  
+  # ════════════════════════════════════════════════════════════════
+  #  A) FREQUENCY TABLES — variables catégorielles (base 5.1)
+  # ════════════════════════════════════════════════════════════════
+  
+  make_freq_table(df, "dmgender",
+                  "Gender distribution",
+                  "freq_gender.png")
+  
+  make_freq_table(df, "origin",
+                  "Country of origin",
+                  "freq_origin.png")
+  
+  make_freq_table(df, "dmres",
+                  "Canton of residence",
+                  "freq_residency.png")
+  
+  make_freq_table(df, "dmwork",
+                  "Work location (canton)",
+                  "freq_work_location.png")
+  
+  make_freq_table(df, "sssknow",
+                  "SSS awareness",
+                  "freq_sss_awareness.png")
+  
+  make_freq_table(df, "sssmember",
+                  "SSS involvement level",
+                  "freq_sss_involvement.png",
+                  order_by = "level")
+  
+  make_freq_table(df, "ssstime",
+                  "SSS membership duration",
+                  "freq_sss_time.png",
+                  order_by = "level")
+  
+  make_freq_table(df, "trlvl",
+                  "Highest education level",
+                  "freq_education_level.png",
+                  order_by = "level")
+  
+  make_freq_table(df, "study_location",
+                  "Study location",
+                  "freq_study_location.png")
+  
+  make_freq_table(df, "continuous_education",
+                  "Continuous education",
+                  "freq_continuous_education.png",
+                  wrap_width = 40)
+  
+  make_freq_table(df, "employed",
+                  "Currently employed",
+                  "freq_employed.png")
+  
+  make_freq_table(df, "job_status",
+                  "Employment status",
+                  "freq_employment_status.png",
+                  subtitle = "Derived from employment + status questions")
+  
+  make_freq_table(df, "plsector",
+                  "Job sector",
+                  "freq_sector.png",
+                  wrap_width = 35)
+  
+  make_freq_table(df, "plsenior",
+                  "Seniority level",
+                  "freq_seniority.png",
+                  order_by = "level")
+  
+  make_freq_table(df, "worksatisfction",
+                  "Overall work satisfaction",
+                  "freq_work_satisfaction.png",
+                  order_by = "level")
+  
+  # ── Dérivées catégorielles (protocole 5.2) ──
+  make_freq_table(df, "age_group",
+                  "Age group",
+                  "freq_age_group.png",
+                  subtitle = "Derived variable — stratification",
+                  order_by = "level")
+  
+  make_freq_table(df, "career_stage",
+                  "Career stage",
+                  "freq_career_stage.png",
+                  subtitle = "Derived — protocol 5.2.2.2, provisional boundaries",
+                  order_by = "level")
+  
+  make_freq_table(df, "exp_group",
+                  "Experience group",
+                  "freq_experience_group.png",
+                  subtitle = "Derived variable — stratification",
+                  order_by = "level")
+  
+  make_freq_table(df, "trcont2",
+                  "Continuous education (beyond 'No')",
+                  "freq_continuous_education_yesno.png",
+                  subtitle = "Derived boolean variable")
+  
+  if ("job_profile" %in% names(df)) {
+    make_freq_table(df, "job_profile",
+                    "[TBD] Activity-based job profiles",
+                    "freq_job_profiles.png",
+                    subtitle = "Derived — rules-based, to be validated")
+  }
+  
+  # ════════════════════════════════════════════════════════════════
+  #  B) TRAINING FIELDS — multi-réponse
+  # ════════════════════════════════════════════════════════════════
+  df_tf_tab <- df |>
+    tidyr::unnest_longer(training_fields_list, values_to = "training_field") |>
+    filter(!is.na(training_field), training_field != "") |>
+    count(training_field, name = "Selections") |>
+    arrange(desc(Selections)) |>
+    mutate(`% of respondents` = Selections / nrow(df))
+  
+  names(df_tf_tab)[1] <- "Training field"
+  
+  gt_tf <- df_tf_tab |>
+    gt() |>
+    fmt_integer(columns = Selections) |>
+    fmt_percent(columns = `% of respondents`, decimals = 1) |>
+    cols_align(align = "left", columns = `Training field`) |>
+    data_color(
+      columns  = Selections,
+      palette  = c("white", sss_blue),
+      alpha    = 0.4
+    ) |>
+    style_table(
+      title    = "Training fields",
+      subtitle = "Multiple selections allowed"
+    )
+  
+  save_gt(gt_tf, "freq_training_fields.png")
+  
+  # ════════════════════════════════════════════════════════════════
+  #  C) SKILLS — multi-réponse
+  # ════════════════════════════════════════════════════════════════
+  df_sk_tab <- df |>
+    tidyr::unnest_longer(skills, values_to = "skill") |>
+    filter(!is.na(skill), skill != "") |>
+    mutate(skill = stringr::str_wrap(skill, width = 45)) |>
+    count(skill, name = "Selections") |>
+    arrange(desc(Selections)) |>
+    mutate(`% of respondents` = Selections / nrow(df))
+  
+  names(df_sk_tab)[1] <- "Skill"
+  
+  gt_sk <- df_sk_tab |>
+    gt() |>
+    fmt_integer(columns = Selections) |>
+    fmt_percent(columns = `% of respondents`, decimals = 1) |>
+    cols_align(align = "left", columns = Skill) |>
+    data_color(
+      columns  = Selections,
+      palette  = c("white", sss_blue),
+      alpha    = 0.4
+    ) |>
+    style_table(
+      title    = "Work-related skills",
+      subtitle = "Multiple selections allowed"
+    )
+  
+  save_gt(gt_sk, "freq_skills.png")
+  
+  # ════════════════════════════════════════════════════════════════
+  #  D) DESCRIPTIVE STATS — variables numériques (base + dérivées)
+  # ════════════════════════════════════════════════════════════════
+  num_vars <- list(
+    list(var = "dmbirth",    label = "Year of birth"),
+    list(var = "age",        label = "Age (years) — derived"),
+    list(var = "tryear",     label = "Training completion year"),
+    list(var = "plyexp",     label = "Years of professional experience"),
+    list(var = "plrate",     label = "Employment rate (%)"),
+    list(var = "salary_raw", label = "Gross salary (CHF, as reported)"),
+    list(var = "salary",     label = "Salary (CHF, normalized 100%) — derived")
   )
-
-names(df_tf_tab)[1] <- "Training field"
-
-gt_tf <- df_tf_tab |>
-  gt() |>
-  fmt_integer(columns = Selections) |>
-  fmt_percent(columns = `% of respondents`, decimals = 1) |>
-  cols_align(align = "left", columns = `Training field`) |>
-  data_color(
-    columns  = Selections,
-    palette  = c("white", sss_blue),
-    alpha    = 0.4
-  ) |>
-  style_table(
-    title    = "Training fields",
-    subtitle = "Multiple selections allowed"
-  )
-
-save_gt(gt_tf, "freq_training_fields.png")
-
-# ══════════════════════════════════════════════════════════════════
-#  C) SKILLS — multi-réponse
-# ══════════════════════════════════════════════════════════════════
-df_sk_tab <- clean_data |>
-  tidyr::unnest_longer(skills, values_to = "skill") |>
-  filter(!is.na(skill), skill != "") |>
-  mutate(skill = stringr::str_wrap(skill, width = 45)) |>
-  count(skill, name = "Selections") |>
-  arrange(desc(Selections)) |>
-  mutate(`% of respondents` = Selections / nrow(clean_data))
-
-names(df_sk_tab)[1] <- "Skill"
-
-gt_sk <- df_sk_tab |>
-  gt() |>
-  fmt_integer(columns = Selections) |>
-  fmt_percent(columns = `% of respondents`, decimals = 1) |>
-  cols_align(align = "left", columns = Skill) |>
-  data_color(
-    columns  = Selections,
-    palette  = c("white", sss_blue),
-    alpha    = 0.4
-  ) |>
-  style_table(
-    title    = "Work-related skills",
-    subtitle = "Multiple selections allowed"
-  )
-
-save_gt(gt_sk, "freq_skills.png")
-
-# ══════════════════════════════════════════════════════════════════
-#  D) DESCRIPTIVE STATS — variables numériques
-# ══════════════════════════════════════════════════════════════════
-num_vars <- list(
-  list(var = "age",    label = "Age (years)"),
-  list(var = "tryear", label = "Training completion year"),
-  list(var = "plyexp", label = "Years of professional experience"),
-  list(var = "plrate", label = "Employment rate (%)"),
-  list(var = "salary", label = "Salary (CHF, normalized 100%)")
-)
-
-desc_rows <- lapply(num_vars, function(v) {
-  x <- clean_data[[v$var]]
-  x <- x[!is.na(x)]
-  data.frame(
-    Variable = v$label,
-    N        = length(x),
-    Mean     = mean(x),
-    SD       = sd(x),
-    Min      = min(x),
-    Q1       = quantile(x, 0.25),
-    Median   = median(x),
-    Q3       = quantile(x, 0.75),
-    Max      = max(x),
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  )
-})
-
-df_desc <- do.call(rbind, desc_rows)
-rownames(df_desc) <- NULL
-
-gt_desc <- df_desc |>
-  gt() |>
-  fmt_number(columns = c(Mean, SD, Q1, Median, Q3), decimals = 1) |>
-  fmt_number(columns = c(Min, Max), decimals = 0) |>
-  fmt_integer(columns = N) |>
-  cols_align(align = "left", columns = Variable) |>
-  tab_style(
-    style     = list(cell_text(weight = "bold")),
-    locations = cells_body(columns = Variable)
-  ) |>
-  tab_spanner(label = "Distribution", columns = c(Min, Q1, Median, Q3, Max)) |>
-  tab_spanner(label = "Central tendency", columns = c(Mean, SD)) |>
-  style_table(
-    title    = "Descriptive statistics — Numerical variables",
-    subtitle = "Salary normalized to 100% workload"
-  )
-
-save_gt(gt_desc, "desc_numerical.png")
-
-# ══════════════════════════════════════════════════════════════════
-#  E) CROSS-TABLES
-# ══════════════════════════════════════════════════════════════════
-
-# ── E1) Gender × Education level ─────────────────────────────────
-df_cross1 <- clean_data |>
-  filter(!is.na(dmgender), !is.na(trlvl)) |>
-  count(trlvl, dmgender, name = "N") |>
-  tidyr::pivot_wider(names_from = dmgender, values_from = N, values_fill = 0) |>
-  mutate(Total = rowSums(across(where(is.numeric)))) |>
-  arrange(match(trlvl, education_level))
-
-names(df_cross1)[1] <- "Education level"
-
-gt_cross1 <- df_cross1 |>
-  gt() |>
-  fmt_integer(columns = where(is.numeric)) |>
-  cols_align(align = "left", columns = `Education level`) |>
-  grand_summary_rows(
-    columns  = where(is.numeric),
-    fns      = list(Total = ~ sum(.)),
-    fmt      = ~ fmt_integer(.)
-  ) |>
-  data_color(
-    columns  = Total,
-    palette  = c("white", sss_blue),
-    alpha    = 0.3
-  ) |>
-  style_table(
-    title    = "Gender by education level",
-    subtitle = "Cross-tabulation (counts)"
-  )
-
-save_gt(gt_cross1, "cross_gender_education.png")
-
-# ── E2) Education level × Seniority ──────────────────────────────
-df_cross2 <- clean_data |>
-  filter(!is.na(trlvl), !is.na(plsenior)) |>
-  count(trlvl, plsenior, name = "N") |>
-  tidyr::pivot_wider(names_from = plsenior, values_from = N, values_fill = 0) |>
-  mutate(Total = rowSums(across(where(is.numeric)))) |>
-  arrange(match(trlvl, education_level))
-
-names(df_cross2)[1] <- "Education level"
-
-gt_cross2 <- df_cross2 |>
-  gt() |>
-  fmt_integer(columns = where(is.numeric)) |>
-  cols_align(align = "left", columns = `Education level`) |>
-  grand_summary_rows(
-    columns  = where(is.numeric),
-    fns      = list(Total = ~ sum(.)),
-    fmt      = ~ fmt_integer(.)
-  ) |>
-  data_color(
-    columns  = where(is.numeric),
-    palette  = c("white", sss_blue),
-    alpha    = 0.3
-  ) |>
-  style_table(
-    title    = "Seniority level by education level",
-    subtitle = "Cross-tabulation (counts)"
-  )
-
-save_gt(gt_cross2, "cross_education_seniority.png")
-
-# ── E3) SSS involvement × membership duration ────────────────────
-df_cross3 <- clean_data |>
-  filter(!is.na(sssmember), !is.na(ssstime)) |>
-  count(ssstime, sssmember, name = "N") |>
-  tidyr::pivot_wider(names_from = sssmember, values_from = N, values_fill = 0) |>
-  mutate(Total = rowSums(across(where(is.numeric)))) |>
-  arrange(match(ssstime, time_sss_level))
-
-names(df_cross3)[1] <- "Membership duration"
-
-gt_cross3 <- df_cross3 |>
-  gt() |>
-  fmt_integer(columns = where(is.numeric)) |>
-  cols_align(align = "left", columns = `Membership duration`) |>
-  grand_summary_rows(
-    columns  = where(is.numeric),
-    fns      = list(Total = ~ sum(.)),
-    fmt      = ~ fmt_integer(.)
-  ) |>
-  data_color(
-    columns  = where(is.numeric),
-    palette  = c("white", sss_blue),
-    alpha    = 0.3
-  ) |>
-  style_table(
-    title    = "SSS involvement by membership duration",
-    subtitle = "Cross-tabulation (counts)"
-  )
-
-save_gt(gt_cross3, "cross_sss_involvement_time.png")
-
-# ── E4) Gender × Sector (top 15) ─────────────────────────────────
-top_sectors <- clean_data |>
-  filter(!is.na(plsector), as.character(plsector) != "None") |>
-  count(plsector, sort = TRUE) |>
-  head(15) |>
-  pull(plsector)
-
-df_cross4 <- clean_data |>
-  filter(!is.na(dmgender), plsector %in% top_sectors) |>
-  count(plsector, dmgender, name = "N") |>
-  tidyr::pivot_wider(names_from = dmgender, values_from = N, values_fill = 0) |>
-  mutate(Total = rowSums(across(where(is.numeric)))) |>
-  arrange(desc(Total))
-
-names(df_cross4)[1] <- "Sector"
-df_cross4$Sector <- stringr::str_wrap(as.character(df_cross4$Sector), width = 30)
-
-gt_cross4 <- df_cross4 |>
-  gt() |>
-  fmt_integer(columns = where(is.numeric)) |>
-  cols_align(align = "left", columns = Sector) |>
-  grand_summary_rows(
-    columns  = where(is.numeric),
-    fns      = list(Total = ~ sum(.)),
-    fmt      = ~ fmt_integer(.)
-  ) |>
-  data_color(
-    columns  = Total,
-    palette  = c("white", sss_blue),
-    alpha    = 0.3
-  ) |>
-  style_table(
-    title    = "Gender distribution by sector",
-    subtitle = "Top 15 sectors (counts)"
-  )
-
-save_gt(gt_cross4, "cross_gender_sector.png")
-
-# ══════════════════════════════════════════════════════════════════
-#  F) SATISFACTION DETAILED — Likert summary table
-# ══════════════════════════════════════════════════════════════════
-df_sat <- clean_data |>
-  tidyr::unnest(issatisf2) |>
-  filter(!is.na(code), !is.na(item)) |>
-  mutate(label = factor(label, levels = satisf_levels))
-
-df_sat_summary <- df_sat |>
-  group_by(item) |>
-  summarise(
-    N         = n(),
-    `Mean`    = mean(code, na.rm = TRUE),
-    `% Satisfied` = mean(label %in% c("Very satisfied", "Somewhat satisfied"),
-                         na.rm = TRUE),
-    `% Dissatisfied` = mean(label %in% c("Not so satisfied",
-                                         "Not at all satisfied"),
-                            na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  arrange(desc(`% Satisfied`))
-
-names(df_sat_summary)[1] <- "Item"
-df_sat_summary$Item <- stringr::str_wrap(df_sat_summary$Item, width = 42)
-
-gt_sat <- df_sat_summary |>
-  gt() |>
-  fmt_integer(columns = N) |>
-  fmt_number(columns = Mean, decimals = 2) |>
-  fmt_percent(columns = c(`% Satisfied`, `% Dissatisfied`), decimals = 1) |>
-  cols_align(align = "left", columns = Item) |>
-  tab_style(
-    style     = list(cell_text(weight = "bold")),
-    locations = cells_body(columns = Item)
-  ) |>
-  data_color(
-    columns  = `% Satisfied`,
-    palette  = c("#fce4e4", "#1a7a4a"),
-    alpha    = 0.4
-  ) |>
-  data_color(
-    columns  = `% Dissatisfied`,
-    palette  = c("#e8f5e9", "#c0392b"),
-    alpha    = 0.4
-  ) |>
-  style_table(
-    title    = "Job satisfaction — Detailed items",
-    subtitle = "Ranked by proportion of satisfied respondents"
-  )
-
-save_gt(gt_sat, "satisfaction_detail.png")
-
-# ══════════════════════════════════════════════════════════════════
-#  G) STATISTICAL ACTIVITIES — Importance summary
-# ══════════════════════════════════════════════════════════════════
-df_us_tab <- clean_data |>
-  mutate(id = row_number()) |>
-  tidyr::unnest(ustime) |>
-  filter(!is.na(importance_code), !is.na(involvement_code)) |>
-  mutate(
-    importance  = factor(importance, levels = importance_levels),
-    involvement = factor(involvement, levels = involvement_levels)
-  )
-
-df_act_summary <- df_us_tab |>
-  group_by(theme) |>
-  summarise(
-    N                = n(),
-    `Mean importance` = mean(importance_code, na.rm = TRUE),
-    `% Important+`    = mean(importance %in% c("Important", "Very important"),
+  
+  desc_rows <- lapply(num_vars, function(v) {
+    if (!v$var %in% names(df)) return(NULL)
+    x <- df[[v$var]]
+    x <- x[!is.na(x)]
+    if (length(x) == 0) return(NULL)
+    data.frame(
+      Variable = v$label,
+      N        = length(x),
+      Mean     = mean(x),
+      SD       = sd(x),
+      Min      = min(x),
+      Q1       = quantile(x, 0.25),
+      Median   = median(x),
+      Q3       = quantile(x, 0.75),
+      Max      = max(x),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  })
+  
+  df_desc <- do.call(rbind, desc_rows)
+  rownames(df_desc) <- NULL
+  
+  gt_desc <- df_desc |>
+    gt() |>
+    fmt_number(columns = c(Mean, SD, Q1, Median, Q3), decimals = 1) |>
+    fmt_number(columns = c(Min, Max), decimals = 0) |>
+    fmt_integer(columns = N) |>
+    cols_align(align = "left", columns = Variable) |>
+    tab_style(
+      style     = list(cell_text(weight = "bold")),
+      locations = cells_body(columns = Variable)
+    ) |>
+    tab_spanner(label = "Distribution", columns = c(Min, Q1, Median, Q3, Max)) |>
+    tab_spanner(label = "Central tendency", columns = c(Mean, SD)) |>
+    style_table(
+      title    = "Descriptive statistics — Numerical variables",
+      subtitle = "Base and derived variables (protocol 5.1 & 5.2)"
+    )
+  
+  save_gt(gt_desc, "desc_numerical.png")
+  
+  # ════════════════════════════════════════════════════════════════
+  #  E) CROSS-TABLES
+  # ════════════════════════════════════════════════════════════════
+  
+  # ── E1) Gender × Education level ─────────────────────────────────
+  df_cross1 <- df |>
+    filter(!is.na(dmgender), !is.na(trlvl)) |>
+    count(trlvl, dmgender, name = "N") |>
+    tidyr::pivot_wider(names_from = dmgender, values_from = N, values_fill = 0) |>
+    mutate(Total = rowSums(across(where(is.numeric)))) |>
+    arrange(match(trlvl, education_level))
+  
+  names(df_cross1)[1] <- "Education level"
+  
+  gt_cross1 <- df_cross1 |>
+    gt() |>
+    fmt_integer(columns = where(is.numeric)) |>
+    cols_align(align = "left", columns = `Education level`) |>
+    grand_summary_rows(
+      columns  = where(is.numeric),
+      fns      = list(Total = ~ sum(.)),
+      fmt      = ~ fmt_integer(.)
+    ) |>
+    data_color(
+      columns  = Total,
+      palette  = c("white", sss_blue),
+      alpha    = 0.3
+    ) |>
+    style_table(
+      title    = "Gender by education level",
+      subtitle = "Cross-tabulation (counts)"
+    )
+  
+  save_gt(gt_cross1, "cross_gender_education.png")
+  
+  # ── E2) Education level × Seniority ──────────────────────────────
+  df_cross2 <- df |>
+    filter(!is.na(trlvl), !is.na(plsenior)) |>
+    count(trlvl, plsenior, name = "N") |>
+    tidyr::pivot_wider(names_from = plsenior, values_from = N, values_fill = 0) |>
+    mutate(Total = rowSums(across(where(is.numeric)))) |>
+    arrange(match(trlvl, education_level))
+  
+  names(df_cross2)[1] <- "Education level"
+  
+  gt_cross2 <- df_cross2 |>
+    gt() |>
+    fmt_integer(columns = where(is.numeric)) |>
+    cols_align(align = "left", columns = `Education level`) |>
+    grand_summary_rows(
+      columns  = where(is.numeric),
+      fns      = list(Total = ~ sum(.)),
+      fmt      = ~ fmt_integer(.)
+    ) |>
+    data_color(
+      columns  = where(is.numeric),
+      palette  = c("white", sss_blue),
+      alpha    = 0.3
+    ) |>
+    style_table(
+      title    = "Seniority level by education level",
+      subtitle = "Cross-tabulation (counts)"
+    )
+  
+  save_gt(gt_cross2, "cross_education_seniority.png")
+  
+  # ── E3) SSS involvement × membership duration ────────────────────
+  df_cross3 <- df |>
+    filter(!is.na(sssmember), !is.na(ssstime)) |>
+    count(ssstime, sssmember, name = "N") |>
+    tidyr::pivot_wider(names_from = sssmember, values_from = N, values_fill = 0) |>
+    mutate(Total = rowSums(across(where(is.numeric)))) |>
+    arrange(match(ssstime, time_sss_level))
+  
+  names(df_cross3)[1] <- "Membership duration"
+  
+  gt_cross3 <- df_cross3 |>
+    gt() |>
+    fmt_integer(columns = where(is.numeric)) |>
+    cols_align(align = "left", columns = `Membership duration`) |>
+    grand_summary_rows(
+      columns  = where(is.numeric),
+      fns      = list(Total = ~ sum(.)),
+      fmt      = ~ fmt_integer(.)
+    ) |>
+    data_color(
+      columns  = where(is.numeric),
+      palette  = c("white", sss_blue),
+      alpha    = 0.3
+    ) |>
+    style_table(
+      title    = "SSS involvement by membership duration",
+      subtitle = "Cross-tabulation (counts)"
+    )
+  
+  save_gt(gt_cross3, "cross_sss_involvement_time.png")
+  
+  # ── E4) Gender × Sector (top 15) ─────────────────────────────────
+  top_sectors <- df |>
+    filter(!is.na(plsector), as.character(plsector) != "None") |>
+    count(plsector, sort = TRUE) |>
+    head(15) |>
+    pull(plsector)
+  
+  df_cross4 <- df |>
+    filter(!is.na(dmgender), plsector %in% top_sectors) |>
+    count(plsector, dmgender, name = "N") |>
+    tidyr::pivot_wider(names_from = dmgender, values_from = N, values_fill = 0) |>
+    mutate(Total = rowSums(across(where(is.numeric)))) |>
+    arrange(desc(Total))
+  
+  names(df_cross4)[1] <- "Sector"
+  df_cross4$Sector <- stringr::str_wrap(as.character(df_cross4$Sector), width = 30)
+  
+  gt_cross4 <- df_cross4 |>
+    gt() |>
+    fmt_integer(columns = where(is.numeric)) |>
+    cols_align(align = "left", columns = Sector) |>
+    grand_summary_rows(
+      columns  = where(is.numeric),
+      fns      = list(Total = ~ sum(.)),
+      fmt      = ~ fmt_integer(.)
+    ) |>
+    data_color(
+      columns  = Total,
+      palette  = c("white", sss_blue),
+      alpha    = 0.3
+    ) |>
+    style_table(
+      title    = "Gender distribution by sector",
+      subtitle = "Top 15 sectors (counts)"
+    )
+  
+  save_gt(gt_cross4, "cross_gender_sector.png")
+  
+  # ════════════════════════════════════════════════════════════════
+  #  F) SATISFACTION DETAILED — Likert summary table
+  # ════════════════════════════════════════════════════════════════
+  df_sat <- df |>
+    tidyr::unnest(issatisf2) |>
+    filter(!is.na(code), !is.na(item)) |>
+    mutate(label = factor(label, levels = satisf_levels))
+  
+  if (nrow(df_sat) > 0) {
+    df_sat_summary <- df_sat |>
+      group_by(item) |>
+      summarise(
+        N         = n(),
+        `Mean`    = mean(code, na.rm = TRUE),
+        `% Satisfied` = mean(label %in% c("Very satisfied", "Somewhat satisfied"),
                              na.rm = TRUE),
-    `% Active use`    = mean(involvement != "No use", na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  arrange(desc(`% Important+`))
-
-names(df_act_summary)[1] <- "Statistical activity"
-
-gt_act <- df_act_summary |>
-  gt() |>
-  fmt_integer(columns = N) |>
-  fmt_number(columns = `Mean importance`, decimals = 2) |>
-  fmt_percent(columns = c(`% Important+`, `% Active use`), decimals = 1) |>
-  cols_align(align = "left", columns = `Statistical activity`) |>
-  tab_style(
-    style     = list(cell_text(weight = "bold")),
-    locations = cells_body(columns = `Statistical activity`)
-  ) |>
-  data_color(
-    columns  = `% Important+`,
-    palette  = c("white", "#1a7a4a"),
-    alpha    = 0.4
-  ) |>
-  data_color(
-    columns  = `% Active use`,
-    palette  = c("white", sss_blue),
-    alpha    = 0.4
-  ) |>
-  style_table(
-    title    = "Statistical activities — Importance & involvement",
-    subtitle = "Sorted by perceived importance"
-  )
-
-save_gt(gt_act, "activities_summary.png")
+        `% Dissatisfied` = mean(label %in% c("Not so satisfied",
+                                             "Not at all satisfied"),
+                                na.rm = TRUE),
+        .groups = "drop"
+      ) |>
+      arrange(desc(`% Satisfied`))
+    
+    names(df_sat_summary)[1] <- "Item"
+    df_sat_summary$Item <- stringr::str_wrap(df_sat_summary$Item, width = 42)
+    
+    gt_sat <- df_sat_summary |>
+      gt() |>
+      fmt_integer(columns = N) |>
+      fmt_number(columns = Mean, decimals = 2) |>
+      fmt_percent(columns = c(`% Satisfied`, `% Dissatisfied`), decimals = 1) |>
+      cols_align(align = "left", columns = Item) |>
+      tab_style(
+        style     = list(cell_text(weight = "bold")),
+        locations = cells_body(columns = Item)
+      ) |>
+      data_color(
+        columns  = `% Satisfied`,
+        palette  = c("#fce4e4", "#1a7a4a"),
+        alpha    = 0.4
+      ) |>
+      data_color(
+        columns  = `% Dissatisfied`,
+        palette  = c("#e8f5e9", "#c0392b"),
+        alpha    = 0.4
+      ) |>
+      style_table(
+        title    = "Job satisfaction — Detailed items",
+        subtitle = "Ranked by proportion of satisfied respondents"
+      )
+    
+    save_gt(gt_sat, "satisfaction_detail.png")
+  }
+  
+  # ════════════════════════════════════════════════════════════════
+  #  G) STATISTICAL ACTIVITIES — Importance summary
+  # ════════════════════════════════════════════════════════════════
+  df_us_tab <- df |>
+    mutate(id = row_number()) |>
+    tidyr::unnest(ustime) |>
+    filter(!is.na(importance_code), !is.na(involvement_code)) |>
+    mutate(
+      importance  = factor(importance, levels = importance_levels),
+      involvement = factor(involvement, levels = involvement_levels)
+    )
+  
+  if (nrow(df_us_tab) > 0) {
+    df_act_summary <- df_us_tab |>
+      group_by(theme) |>
+      summarise(
+        N                = n(),
+        `Mean importance` = mean(importance_code, na.rm = TRUE),
+        `% Important+`    = mean(importance %in% c("Important", "Very important"),
+                                 na.rm = TRUE),
+        `% Active use`    = mean(involvement != "No use", na.rm = TRUE),
+        .groups = "drop"
+      ) |>
+      arrange(desc(`% Important+`))
+    
+    names(df_act_summary)[1] <- "Statistical activity"
+    
+    gt_act <- df_act_summary |>
+      gt() |>
+      fmt_integer(columns = N) |>
+      fmt_number(columns = `Mean importance`, decimals = 2) |>
+      fmt_percent(columns = c(`% Important+`, `% Active use`), decimals = 1) |>
+      cols_align(align = "left", columns = `Statistical activity`) |>
+      tab_style(
+        style     = list(cell_text(weight = "bold")),
+        locations = cells_body(columns = `Statistical activity`)
+      ) |>
+      data_color(
+        columns  = `% Important+`,
+        palette  = c("white", "#1a7a4a"),
+        alpha    = 0.4
+      ) |>
+      data_color(
+        columns  = `% Active use`,
+        palette  = c("white", sss_blue),
+        alpha    = 0.4
+      ) |>
+      style_table(
+        title    = "Statistical activities — Importance & involvement",
+        subtitle = "Sorted by perceived importance"
+      )
+    
+    save_gt(gt_act, "activities_summary.png")
+  }
+  
+  # ════════════════════════════════════════════════════════════════
+  #  H) SALARY BY SECTOR — summary stats
+  # ════════════════════════════════════════════════════════════════
+  df_sal_sector <- df |>
+    filter(!is.na(salary), !is.na(plsector),
+           as.character(plsector) != "None") |>
+    group_by(plsector) |>
+    filter(n() >= 5) |>
+    summarise(
+      N      = n(),
+      Mean   = mean(salary, na.rm = TRUE),
+      Median = median(salary, na.rm = TRUE),
+      SD     = sd(salary, na.rm = TRUE),
+      Min    = min(salary, na.rm = TRUE),
+      Max    = max(salary, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    arrange(desc(Median))
+  
+  if (nrow(df_sal_sector) > 0) {
+    names(df_sal_sector)[1] <- "Sector"
+    df_sal_sector$Sector <- stringr::str_wrap(as.character(df_sal_sector$Sector),
+                                              width = 30)
+    
+    gt_sal <- df_sal_sector |>
+      gt() |>
+      fmt_integer(columns = N) |>
+      fmt_currency(
+        columns  = c(Mean, Median, SD, Min, Max),
+        currency = "CHF", decimals = 0
+      ) |>
+      cols_align(align = "left", columns = Sector) |>
+      tab_style(
+        style     = list(cell_text(weight = "bold")),
+        locations = cells_body(columns = Sector)
+      ) |>
+      tab_spanner(label = "Distribution (CHF)", columns = c(Min, Median, Max)) |>
+      tab_spanner(label = "Central tendency (CHF)", columns = c(Mean, SD)) |>
+      data_color(
+        columns  = Median,
+        palette  = c("#fce4e4", "#1a7a4a"),
+        alpha    = 0.35
+      ) |>
+      style_table(
+        title    = "Salary by sector",
+        subtitle = "Normalized to 100% workload — sectors with n ≥ 5"
+      )
+    
+    save_gt(gt_sal, "salary_by_sector.png")
+  }
+  
+  message("✔ Tables générées pour : ", label)
+}
 
 # ══════════════════════════════════════════════════════════════════
-#  H) SALARY BY SECTOR — summary stats
+#  EXÉCUTION — 2 populations (protocole §5)
 # ══════════════════════════════════════════════════════════════════
-df_sal_sector <- clean_data |>
-  filter(!is.na(salary), !is.na(plsector),
-         as.character(plsector) != "None") |>
-  group_by(plsector) |>
-  filter(n() >= 5) |>
-  summarise(
-    N      = n(),
-    Mean   = mean(salary, na.rm = TRUE),
-    Median = median(salary, na.rm = TRUE),
-    SD     = sd(salary, na.rm = TRUE),
-    Min    = min(salary, na.rm = TRUE),
-    Max    = max(salary, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  arrange(desc(Median))
 
-names(df_sal_sector)[1] <- "Sector"
-df_sal_sector$Sector <- stringr::str_wrap(as.character(df_sal_sector$Sector),
-                                          width = 30)
+# 1) Population complète
+generate_tables(clean_data,
+                label  = "All respondents",
+                subdir = "full_population")
 
-gt_sal <- df_sal_sector |>
-  gt() |>
-  fmt_integer(columns = N) |>
-  fmt_currency(
-    columns  = c(Mean, Median, SD, Min, Max),
-    currency = "CHF", decimals = 0
-  ) |>
-  cols_align(align = "left", columns = Sector) |>
-  tab_style(
-    style     = list(cell_text(weight = "bold")),
-    locations = cells_body(columns = Sector)
-  ) |>
-  tab_spanner(label = "Distribution (CHF)", columns = c(Min, Median, Max)) |>
-  tab_spanner(label = "Central tendency (CHF)", columns = c(Mean, SD)) |>
-  data_color(
-    columns  = Median,
-    palette  = c("#fce4e4", "#1a7a4a"),
-    alpha    = 0.35
-  ) |>
-  style_table(
-    title    = "Salary by sector",
-    subtitle = "Normalized to 100% workload — sectors with n ≥ 5"
-  )
+# 2) Membres SSS uniquement
+sss_data <- clean_data |> filter(is_sss_member)
 
-save_gt(gt_sal, "salary_by_sector.png")
+if (nrow(sss_data) >= 5) {
+  generate_tables(sss_data,
+                  label  = paste0("SSS members only"),
+                  subdir = "sss_members")
+} else {
+  message("⚠ Moins de 5 membres SSS — tables SSS non générées")
+}
 
-message("✔ 06_tables.R terminé — tables dans ", tables_dir)
+message("✔ 06_tables.R terminé — tables dans ", tab_dir)

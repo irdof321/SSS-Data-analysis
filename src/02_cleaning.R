@@ -263,6 +263,64 @@ clean_data$issatisf2 <- lapply(seq_len(nrow(issatisf_mat)), function(i) {
   )
 })
 
+# ══════════════════════════════════════════════════════════════════
+#  PATCH_02_cleaning_derived_vars.R
+#  → À COLLER À LA FIN de 02_cleaning.R (avant le write_csv)
+#  Variables dérivées selon protocole section 5.2
+# ══════════════════════════════════════════════════════════════════
+
+####################################################################
+#  Variables dérivées (protocole 5.2)
+####################################################################
+
+### Salaire BRUT (variable de base, avant normalisation)
+# NOTE: la variable `salary` existante est déjà la dérivée normalisée 100%.
+# On garde ici le salaire brut tel que déclaré.
+x_raw <- as.character(raw_data$issalary)
+x_raw <- gsub("'", "", x_raw)
+x_raw <- gsub(" ", "", x_raw)
+x_raw <- gsub(",", ".", x_raw)
+clean_data$salary_raw <- suppressWarnings(as.numeric(x_raw))
+
+### Career stage (protocole 5.2.2.2)
+# Regroupement des années d'expérience en stades de carrière.
+# Bornes provisoires (à ajuster selon la distribution empirique
+# des données réelles, cf. protocole : "data-driven")
+career_stage_levels <- c("Early-career (0-5 y)",
+                         "Mid-career (6-15 y)",
+                         "Senior (16+ y)")
+
+clean_data$career_stage <- cut(
+  clean_data$plyexp,
+  breaks = c(-Inf, 5, 15, Inf),
+  labels = career_stage_levels,
+  right  = TRUE
+)
+
+### Groupe d'âge (utilisé pour stratifications, cf. 5.3.3 "age group")
+age_group_levels <- c("< 30", "30-39", "40-49", "50-59", "60+")
+clean_data$age_group <- cut(
+  clean_data$age,
+  breaks = c(-Inf, 29, 39, 49, 59, Inf),
+  labels = age_group_levels,
+  right  = TRUE
+)
+
+### Groupe d'expérience (déplacé ici depuis 05_plots_advanced.R
+#   pour être une vraie variable dérivée réutilisable)
+exp_group_levels <- c("0-5 years", "6-10 years", "11-20 years", "20+ years")
+clean_data$exp_group <- cut(
+  clean_data$plyexp,
+  breaks = c(0, 5, 10, 20, Inf),
+  labels = exp_group_levels,
+  right = TRUE, include.lowest = TRUE
+)
+
+### Membre SSS (booléen dérivé — utilisé pour dupliquer les analyses
+#   sur la sous-population "SSS members" comme demandé au protocole §5)
+clean_data$is_sss_member <- !is.na(clean_data$sssmember) &
+  clean_data$sssmember != "Not a member"
+
 ####################################################################
 #  Export CSV intermédiaire (optionnel)
 ####################################################################

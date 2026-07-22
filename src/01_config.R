@@ -40,7 +40,7 @@ if (!dir.exists(tab_dir)) dir.create(tab_dir)
 csv_dir <- "csv_files"
 
 # ── Interrupteur : générer (ou non) le miroir CSV des tables ──────
-generate_csv_files <- TRUE   # mettre FALSE pour désactiver
+generate_csv_files <- FALSE   # mettre FALSE pour désactiver
 
 if (generate_csv_files && !dir.exists(csv_dir)) dir.create(csv_dir)
 

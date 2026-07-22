@@ -1,554 +1,395 @@
 # ══════════════════════════════════════════════════════════════════
-#  05_plots_advanced.R — Analyses croisées (section 5.4.1)
+#  05_plots_advanced.R — Graphiques croisés (miroir de 07_tables_derived_variables.R)
 #  Dépend de : 01_config.R, 02_cleaning.R, 03_helpers.R
+#  Réutilise `is_manager` et `job_profile`, créés dans 07 — donc à
+#  sourcer APRÈS 07_tables_derived_variables.R.
+#
+#  Même population que 07 (pas de split SSS members — cf. commentaire
+#  d'en-tête du 07), mêmes noms de fichiers pour retrouver le graphe
+#  jumeau de chaque table.
 # ══════════════════════════════════════════════════════════════════
 
-# ── Genre × Domaine de formation ──────────────────────────────────
-df_fields <- clean_data %>%
-  tidyr::unnest_longer(training_fields_list, values_to = "training_field") %>%
-  mutate(training_field = trimws(as.character(training_field))) %>%
-  filter(!is.na(training_field), training_field != "",
-         !is.na(dmgender), dmgender != "") %>%
-  mutate(training_field = factor(training_field, levels = training_field_study))
+# ══════════════════════════════════════════════════════════════════
+#  §5.3.1 — CAREER PATHWAYS  →  out_dir/career_pathways/
+# ══════════════════════════════════════════════════════════════════
+plots_dir <- file.path(out_dir, "career_pathways")
+if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
+message("── Plots : career_pathways ──")
 
-gender_palette <- c(
-  "Man"               = "#2C7FB8",
-  "Woman"             = "#e05252",
-  "Other"             = "#e6a817",
-  "Prefer not to say" = "#6dbe8d"
+save_heatmap_crosstab(clean_data, "job_role", "trlvl",
+                      "Work position by highest degree obtained",
+                      "career_jobrole_by_degree.png",
+                      subtitle = "Counts", wrap_width = 30)
+
+save_heatmap_crosstab(clean_data, "plsenior", "trlvl",
+                      "Seniority level by highest degree obtained",
+                      "career_seniority_by_degree.png",
+                      subtitle = "Counts")
+
+save_rate_bar(clean_data, "trlvl", "is_manager",
+              "Managerial responsibility by highest degree obtained",
+              "career_manager_rate_by_degree.png",
+              subtitle = "Share of respondents in a managerial position (lower/middle/top management)")
+
+save_facet_topn(clean_data, "job_profile", "job_role", n_top = 5,
+                "Most common job titles within each activity-based profile",
+                "career_jobtitles_by_profile.png",
+                subtitle = "Top 5 job titles per profile — profiles are rules-based (protocol 5.2, provisional)")
+
+# Mean perceived importance of statistical activities, by job profile -> heatmap
+df_us_profile <- clean_data |>
+  tidyr::unnest(ustime) |>
+  filter(!is.na(importance_code), !is.na(job_profile)) |>
+  mutate(theme = stringr::str_wrap(theme, width = 28))
+
+if (nrow(df_us_profile) > 0) {
+  tab_imp <- df_us_profile |>
+    group_by(job_profile, theme) |>
+    summarise(mean_imp = mean(importance_code, na.rm = TRUE), .groups = "drop")
+  
+  p <- ggplot(tab_imp, aes(x = theme, y = job_profile, fill = mean_imp)) +
+    geom_tile(color = sss_bg, linewidth = 1.5) +
+    geom_text(aes(label = round(mean_imp, 1),
+                  color = mean_imp > (max(tab_imp$mean_imp) * 0.55)),
+              size = 3.3, fontface = "bold", show.legend = FALSE) +
+    scale_color_manual(values = c(`TRUE` = "white", `FALSE` = sss_blue_dark)) +
+    scale_fill_gradient(low = "#eaf2fa", high = sss_blue_dark, guide = "none") +
+    labs(title = sss_wrap_title("Mean perceived importance of statistical activities, by job profile"),
+         subtitle = sss_wrap_subtitle("Scale: 0 (Not at all important) to 4 (Very important)"),
+         caption = sss_caption_note(nrow(clean_data), "All respondents")) +
+    theme_sss(horizontal = TRUE) +
+    theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 30, hjust = 1))
+  
+  save_plot(p, "career_importance_by_profile.png", height = 4.5)
+}
+
+# Field of study by gender (multi-select field) -> heatmap
+df_fields_gender <- clean_data |>
+  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  filter(!is.na(field), field != "", !is.na(dmgender))
+
+save_heatmap_crosstab(df_fields_gender, "field", "dmgender",
+                      "Distribution of field of study by gender",
+                      "career_field_by_gender.png",
+                      subtitle = "Multiple fields of study allowed per respondent — counts",
+                      wrap_width = 28)
+
+# Field of study by location of graduation -> heatmap
+df_fields_loc <- clean_data |>
+  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  filter(!is.na(field), field != "", !is.na(study_location))
+
+save_heatmap_crosstab(df_fields_loc, "field", "study_location",
+                      "Distribution of field of study by location of graduation",
+                      "career_field_by_location.png",
+                      subtitle = "Multiple fields of study allowed per respondent — counts",
+                      wrap_width = 28)
+
+message("  ✔ career_pathways")
+
+# ══════════════════════════════════════════════════════════════════
+#  §5.3.2 — LABOUR MARKET  →  out_dir/labour_market/
+# ══════════════════════════════════════════════════════════════════
+plots_dir <- file.path(out_dir, "labour_market")
+if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
+message("── Plots : labour_market ──")
+
+sector_counts <- clean_data |> filter(!is.na(plsector)) |> count(plsector)
+sector_eligible <- sector_counts$plsector[sector_counts$n >= 5]
+df_sector_pool <- clean_data |> filter(plsector %in% sector_eligible)
+
+df_us_overall <- clean_data |>
+  tidyr::unnest(ustime) |>
+  filter(!is.na(importance_code)) |>
+  mutate(theme = stringr::str_wrap(theme, width = 42))
+
+if (nrow(df_us_overall) > 0) {
+  tab_us_overall <- df_us_overall |>
+    group_by(theme) |>
+    summarise(pct_important = mean(importance_code >= 3, na.rm = TRUE), .groups = "drop") |>
+    mutate(theme = forcats::fct_reorder(theme, pct_important))
+  
+  p <- ggplot(tab_us_overall, aes(x = theme, y = pct_important)) +
+    geom_col(fill = sss_blue, width = 0.6) +
+    geom_text(aes(label = scales::percent(pct_important, accuracy = 1)),
+              hjust = -0.15, size = 3.4, color = sss_grey_text) +
+    coord_flip(clip = "off") +
+    scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1.1)) +
+    labs(title = sss_wrap_title("Statistical activities — overall importance and use"),
+         subtitle = sss_wrap_subtitle("Sorted by perceived importance"),
+         caption = sss_caption_note(nrow(clean_data), "All respondents")) +
+    theme_sss(horizontal = TRUE)
+  save_plot(p, "labour_activities_overall.png", height = 4.5)
+}
+
+save_bar_multi(clean_data, "skills",
+               "Work-related skills — overall", "labour_skills_overall.png",
+               wrap_width = 45)
+
+df_us_sector <- clean_data |>
+  tidyr::unnest(ustime) |>
+  filter(!is.na(importance_code), plsector %in% sector_eligible) |>
+  mutate(theme = stringr::str_wrap(theme, width = 28))
+
+save_heatmap_crosstab(df_us_sector, "plsector", "theme",
+                      "Mean perceived importance of statistical activities, by sector",
+                      "labour_activities_by_sector.png",
+                      subtitle = "Scale: 0-4. Sectors with fewer than 5 respondents excluded.",
+                      wrap_width = 30)
+
+df_skills_sector <- df_sector_pool |>
+  tidyr::unnest_longer(skills, values_to = "skill") |>
+  filter(!is.na(skill), skill != "")
+
+save_heatmap_crosstab(df_skills_sector, "plsector", "skill",
+                      "Work-related skills — share of respondents, by sector",
+                      "labour_skills_by_sector.png",
+                      subtitle = "Multiple skills allowed per respondent. Sectors with fewer than 5 respondents excluded.",
+                      wrap_width = 30, col_wrap_width = 18)
+
+save_boxplot(df_sector_pool, "plyexp",
+             "Years of professional experience, by sector",
+             "labour_experience_by_sector.png",
+             groupvar = "plsector",
+             subtitle = "Sorted by median years of experience. Sectors with fewer than 5 respondents excluded.")
+
+save_heatmap_crosstab(df_sector_pool, "plsector", "plsenior",
+                      "Seniority level, by sector",
+                      "labour_seniority_by_sector.png",
+                      subtitle = "Sectors with fewer than 5 respondents excluded.",
+                      wrap_width = 30)
+
+save_rate_bar(df_sector_pool, "plsector", "is_manager",
+              "Managerial responsibility, by sector",
+              "labour_manager_rate_by_sector.png",
+              subtitle = "Share of respondents in a managerial position. Sectors with fewer than 5 respondents excluded.")
+
+save_bar_freq(clean_data, "continuous_education",
+              "Continuous education", "labour_continuing_ed_overall.png",
+              order = "freq", horizontal = TRUE, wrap_width = 40,
+              subtitle = "Respondents who selected more than one option are excluded")
+
+save_stacked_100_bar(df_sector_pool, "plsector", "continuous_education",
+                     "Continuous education, by sector",
+                     "labour_continuing_ed_by_sector.png",
+                     subtitle = "Sectors with fewer than 5 respondents excluded")
+
+save_stacked_100_bar(clean_data, "plsenior", "continuous_education",
+                     "Continuous education, by seniority level",
+                     "labour_continuing_ed_by_seniority.png",
+                     group_order = seniority_level_levels)
+
+save_stacked_100_bar(clean_data, "exp_group", "continuous_education",
+                     "Continuous education, by years of experience",
+                     "labour_continuing_ed_by_experience.png",
+                     group_order = exp_group_levels)
+
+message("  ✔ labour_market")
+
+# ══════════════════════════════════════════════════════════════════
+#  §5.3.3 — SALARY AND CONDITIONS  →  out_dir/salary_and_conditions/
+# ══════════════════════════════════════════════════════════════════
+plots_dir <- file.path(out_dir, "salary_and_conditions")
+if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
+message("── Plots : salary_and_conditions ──")
+
+dmwork_counts <- clean_data |> filter(!is.na(dmwork), dmwork != "I do not work") |> count(dmwork)
+dmwork_eligible <- dmwork_counts$dmwork[dmwork_counts$n >= 5]
+df_work_pool <- clean_data |> filter(dmwork %in% dmwork_eligible)
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by sector of employment", "salary_by_sector.png",
+             groupvar = "plsector",
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by work position (job title)", "salary_by_jobrole.png",
+             groupvar = "job_role",
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by highest degree obtained", "salary_by_degree.png",
+             groupvar = "trlvl", order_by_median = FALSE,
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by years of professional experience", "salary_by_experience.png",
+             groupvar = "exp_group", order_by_median = FALSE,
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by seniority level", "salary_by_seniority.png",
+             groupvar = "plsenior", order_by_median = FALSE,
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by age group", "salary_by_age_group.png",
+             groupvar = "age_group", order_by_median = FALSE,
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_boxplot(df_work_pool, "salary",
+             "Salary levels, by work region (canton)", "salary_by_work_region.png",
+             groupvar = "dmwork",
+             subtitle = "Full-time equivalent (100% workload), in CHF. Regions with fewer than 5 respondents excluded.")
+
+save_boxplot(clean_data, "salary",
+             "Salary levels, by gender", "salary_by_gender.png",
+             groupvar = "dmgender",
+             subtitle = "Full-time equivalent (100% workload), in CHF")
+
+save_diverging_satisfaction(clean_data, "plsector",
+                            "Job satisfaction, by sector of employment",
+                            "satisfaction_by_sector.png")
+
+save_diverging_satisfaction(clean_data, "trlvl",
+                            "Job satisfaction, by highest degree obtained",
+                            "satisfaction_by_degree.png",
+                            group_order = education_level)
+
+save_diverging_satisfaction(clean_data, "plsenior",
+                            "Job satisfaction, by seniority level",
+                            "satisfaction_by_seniority.png",
+                            group_order = seniority_level_levels)
+
+clean_data$salary_quartile <- cut(clean_data$salary,
+                                  breaks = quantile(clean_data$salary, probs = seq(0, 1, 0.25), na.rm = TRUE),
+                                  labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"),
+                                  include.lowest = TRUE)
+
+save_diverging_satisfaction(clean_data, "salary_quartile",
+                            "Job satisfaction, by salary level (quartiles)",
+                            "satisfaction_by_salary.png",
+                            subtitle = "Quartiles computed on full-time equivalent salary",
+                            group_order = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"))
+
+clean_data$workrate_group <- cut(clean_data$plrate,
+                                 breaks = c(0, 50, 80, 100),
+                                 labels = c("≤ 50%", "51-80%", "81-100%"),
+                                 include.lowest = TRUE)
+
+save_diverging_satisfaction(clean_data, "workrate_group",
+                            "Job satisfaction, by work rate",
+                            "satisfaction_by_workrate.png",
+                            group_order = c("≤ 50%", "51-80%", "81-100%"))
+
+save_diverging_satisfaction(clean_data, "exp_group",
+                            "Job satisfaction, by years of professional experience",
+                            "satisfaction_by_experience.png",
+                            group_order = exp_group_levels)
+
+save_hist(clean_data, "plrate",
+          "Work rate — descriptive statistics", "desc_workrate.png")
+
+save_bar_freq(clean_data, "workrate_group",
+              "Work rate group", "freq_workrate_group.png",
+              order = "level")
+
+save_bar_freq(clean_data, "job_status",
+              "Employment status", "freq_employment_status_conditions.png",
+              subtitle = "No fixed-term vs. permanent contract variable is available in the survey")
+
+message("  ✔ salary_and_conditions")
+
+# ══════════════════════════════════════════════════════════════════
+#  §5.3.4 — FUTURE RESEARCH  →  out_dir/future_research/
+# ══════════════════════════════════════════════════════════════════
+plots_dir <- file.path(out_dir, "future_research")
+if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
+message("── Plots : future_research ──")
+
+save_diverging_satisfaction(clean_data, "job_role",
+                            "Job satisfaction, by job role",
+                            "assoc_satisfaction_by_jobrole.png")
+
+df_skill_sat <- clean_data |>
+  tidyr::unnest_longer(skills, values_to = "skill") |>
+  filter(!is.na(skill), skill != "", !is.na(satisf_score))
+
+if (nrow(df_skill_sat) > 0) {
+  tab_sk_sat <- df_skill_sat |>
+    mutate(skill = stringr::str_wrap(skill, width = 40)) |>
+    group_by(skill) |>
+    summarise(mean_score = mean(satisf_score, na.rm = TRUE), .groups = "drop") |>
+    mutate(skill = forcats::fct_reorder(skill, mean_score))
+  
+  p <- ggplot(tab_sk_sat, aes(x = skill, y = mean_score)) +
+    geom_col(fill = sss_blue, width = 0.6) +
+    geom_text(aes(label = round(mean_score, 2)), hjust = -0.15, size = 3.4, color = sss_grey_text) +
+    coord_flip(clip = "off") +
+    labs(title = sss_wrap_title("Job satisfaction, by work-related skill held"),
+         subtitle = sss_wrap_subtitle("Multiple skills allowed per respondent — mean satisfaction score (1-5, 5 = Very satisfied)"),
+         caption = sss_caption_note(nrow(clean_data), "All respondents")) +
+    theme_sss(horizontal = TRUE)
+  save_plot(p, "assoc_satisfaction_by_skill.png", height = max(4, 0.5 * nrow(tab_sk_sat) + 1.8))
+}
+
+save_diverging_satisfaction(clean_data, "job_profile",
+                            "Job satisfaction, by activity-based job profile",
+                            "assoc_satisfaction_by_jobprofile.png",
+                            subtitle = "Bonus plot (not explicitly requested by protocol)",
+                            group_order = profile_order)
+
+save_stacked_100_bar(clean_data, "trlvl", "continuous_education",
+                     "Continuous education, by highest degree obtained",
+                     "future_contedu_by_degree.png",
+                     group_order = education_level)
+
+df_field_ce <- clean_data |>
+  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  filter(!is.na(field), field != "", !is.na(continuous_education))
+
+save_heatmap_crosstab(df_field_ce, "field", "continuous_education",
+                      "Continuous education, by field of study",
+                      "future_contedu_by_field.png",
+                      subtitle = "Multiple fields of study allowed per respondent",
+                      wrap_width = 26)
+
+save_stacked_100_bar(df_sector_pool, "plsector", "continuous_education",
+                     "Continuous education, by sector of employment",
+                     "future_contedu_by_sector.png",
+                     subtitle = "Sectors with fewer than 5 respondents excluded")
+
+save_stacked_100_bar(clean_data, "job_profile", "continuous_education",
+                     "Continuous education, by activity-based job profile",
+                     "future_contedu_by_jobprofile.png",
+                     subtitle = "Profiles as defined in section 5.3.2.2",
+                     group_order = profile_order)
+
+message("  ✔ future_research")
+
+# ══════════════════════════════════════════════════════════════════
+#  §5.3.5 — HIDDEN STATISTICAL ROLES  →  out_dir/hidden_statistical_roles/
+# ══════════════════════════════════════════════════════════════════
+plots_dir <- file.path(out_dir, "hidden_statistical_roles")
+if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
+message("── Plots : hidden_statistical_roles ──")
+
+# Heuristique simple pour rolegroup — À ALIGNER avec la règle exacte
+# utilisée dans 07_tables_derived_variables.R si elle diffère.
+clean_data$rolegroup <- ifelse(
+  grepl("stat|data", clean_data$job_role, ignore.case = TRUE),
+  "Explicit statistical/data role", "Hidden statistical role"
 )
 
-df_plot <- df_fields %>%
-  count(training_field, dmgender, name = "n") %>%
-  group_by(training_field) %>%
-  mutate(pct = n / sum(n)) %>%
-  ungroup()
+df_skills_role <- clean_data |>
+  tidyr::unnest_longer(skills, values_to = "skill") |>
+  filter(!is.na(skill), skill != "")
 
-p_gender_by_field <- ggplot(df_plot,
-  aes(x = training_field, y = pct, fill = dmgender)) +
-  geom_col(position = position_dodge(width = 0.85), width = 0.8) +
-  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, 1)) +
-  scale_fill_manual(values = gender_palette, drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Gender distribution by training field"),
-       x = "Training field", y = "Share within field", fill = "Gender") +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "right")
+save_heatmap_crosstab(df_skills_role, "skill", "rolegroup",
+                      "Work-related skills, by role group",
+                      "hidden_skills_by_rolegroup.png",
+                      subtitle = "Explicit statistical/data job titles vs. hidden statistical roles",
+                      wrap_width = 28)
 
-print(p_gender_by_field)
-ggsave(file.path(out_dir, "gender_by_training_field.png"),
-       p_gender_by_field, width = 14, height = 7, dpi = 300)
-table_count <<- table_count + 1
+df_us_role <- clean_data |>
+  tidyr::unnest(ustime) |>
+  filter(!is.na(importance_code)) |>
+  mutate(theme = stringr::str_wrap(theme, width = 28))
 
-# ── Genre × Lieu d'études ─────────────────────────────────────────
-df_loc_gender <- clean_data %>%
-  filter(!is.na(study_location), !is.na(dmgender)) %>%
-  count(study_location, dmgender, name = "n") %>%
-  group_by(study_location) %>%
-  mutate(pct = n / sum(n)) %>%
-  ungroup()
+save_heatmap_crosstab(df_us_role, "theme", "rolegroup",
+                      "Statistical activities, by role group",
+                      "hidden_activities_by_rolegroup.png",
+                      subtitle = "Mean perceived importance — explicit vs. hidden statistical roles")
 
-p_loc_gender <- ggplot(df_loc_gender,
-  aes(x = study_location, y = pct, fill = dmgender)) +
-  geom_col(position = position_dodge2(width = 0.85, preserve = "single"),
-           width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, 1)) +
-  scale_fill_manual(values = gender_palette, drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Gender distribution by study location"),
-       x = NULL, y = "Share within location", fill = "Gender") +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"),
-        panel.grid.major.x = element_blank(),
-        axis.text.x = element_text(angle = 35, hjust = 1),
-        legend.position = "right")
-
-print(p_loc_gender)
-ggsave(file.path(out_dir, "gender_by_study_location.png"),
-       p_loc_gender, width = 12, height = 6, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Genre × Niveau de diplôme ─────────────────────────────────────
-df_edu_gender <- clean_data %>%
-  filter(!is.na(trlvl), !is.na(dmgender)) %>%
-  count(trlvl, dmgender, name = "n") %>%
-  group_by(trlvl) %>%
-  mutate(pct = n / sum(n)) %>%
-  ungroup()
-
-p_edu_gender <- ggplot(df_edu_gender,
-  aes(x = trlvl, y = pct, fill = dmgender)) +
-  geom_col(position = position_dodge2(width = 0.85, preserve = "single"),
-           width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, 1)) +
-  scale_fill_manual(values = gender_palette, drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Gender distribution by education level"),
-       x = NULL, y = "Share within level", fill = "Gender") +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"),
-        panel.grid.major.x = element_blank(),
-        axis.text.x = element_text(angle = 35, hjust = 1),
-        legend.position = "right")
-
-print(p_edu_gender)
-ggsave(file.path(out_dir, "gender_by_education_level.png"),
-       p_edu_gender, width = 12, height = 6, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Lieu d'études × Domaine de formation ─────────────────────────
-df_field_loc <- clean_data %>%
-  tidyr::unnest_longer(training_fields_list, values_to = "training_field") %>%
-  mutate(training_field = trimws(as.character(training_field))) %>%
-  filter(!is.na(training_field), training_field != "",
-         !is.na(study_location)) %>%
-  mutate(training_field = factor(training_field, levels = training_field_study)) %>%
-  count(training_field, study_location, name = "n") %>%
-  group_by(training_field) %>%
-  mutate(pct = n / sum(n)) %>%
-  ungroup()
-
-p_field_loc <- ggplot(df_field_loc,
-  aes(x = training_field, y = pct, fill = study_location)) +
-  geom_col(position = position_stack(), width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_brewer(palette = "Set2", drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Study location by training field"),
-       x = NULL, y = "Share within field", fill = "Study location") +
-  theme_minimal(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"),
-        panel.grid.major.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "right")
-
-print(p_field_loc)
-ggsave(file.path(out_dir, "study_location_by_training_field.png"),
-       p_field_loc, width = 14, height = 7, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Séniorité × Niveau de diplôme (3 versions) ───────────────────
-df_sen_edu <- clean_data %>%
-  filter(!is.na(plsenior), !is.na(trlvl)) %>%
-  count(trlvl, plsenior, name = "n") %>%
-  group_by(trlvl) %>%
-  mutate(pct = n / sum(n)) %>%
-  ungroup()
-
-# v1 — grouped bar
-p_sen_edu_1 <- ggplot(df_sen_edu,
-  aes(x = plsenior, y = pct, fill = trlvl)) +
-  geom_col(position = position_dodge2(preserve = "single"), width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_brewer(palette = "Blues", drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Seniority level by education level — grouped bar"),
-       x = NULL, y = "Share within education level", fill = "Education") +
-  theme_minimal(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 35, hjust = 1),
-        legend.position = "right")
-
-print(p_sen_edu_1)
-ggsave(file.path(out_dir, "seniority_by_education_v1_grouped.png"),
-       p_sen_edu_1, width = 13, height = 7, dpi = 300)
-table_count <<- table_count + 1
-
-# v2 — stacked 100%
-p_sen_edu_2 <- ggplot(df_sen_edu,
-  aes(x = trlvl, y = pct, fill = plsenior)) +
-  geom_col(width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_brewer(palette = "RdYlGn", direction = -1, drop = FALSE) +
-  labs(title = "Seniority level by education level — stacked bar",
-       x = NULL, y = "Share within education level", fill = "Seniority") +
-  theme_minimal(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 35, hjust = 1),
-        legend.position = "right")
-
-print(p_sen_edu_2)
-ggsave(file.path(out_dir, "seniority_by_education_v2_stacked.png"),
-       p_sen_edu_2, width = 13, height = 7, dpi = 300)
-
-# v3 — facet
-p_sen_edu_3 <- ggplot(df_sen_edu, aes(x = plsenior, y = pct)) +
-  geom_col(fill = my_fill, width = 0.7) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  facet_wrap(~ trlvl, nrow = 2) +
-  labs(title = paste("Table-", table_count,
-                     " Seniority level by education level — facet"),
-       x = NULL, y = NULL) +
-  theme_minimal(base_size = 10) +
-  theme(plot.title = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.text = element_text(face = "bold"))
-
-print(p_sen_edu_3)
-ggsave(file.path(out_dir, "seniority_by_education_v3_facet.png"),
-       p_sen_edu_3, width = 14, height = 8, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Profils d'activité (règles manuelles — TBD) ───────────────────
-# TODO: règles à valider sur données réelles ; remplacer potentiellement par k-means
-
-df_scores <- clean_data %>%
-  mutate(id = row_number()) %>%
-  tidyr::unnest(ustime) %>%
-  filter(!is.na(importance_code)) %>%
-  select(id, theme_id, importance_code) %>%
-  tidyr::pivot_wider(names_from = theme_id, values_from = importance_code,
-                     names_prefix = "theme_") %>%
-  rename(cleaning    = theme_1, descriptive = theme_2,
-         inferential = theme_3, modeling    = theme_4,
-         automation  = theme_5, supervision = theme_6)
-
-df_scores <- df_scores %>%
-  mutate(
-    job_profile = case_when(
-      supervision >= 3 & supervision == pmax(cleaning, descriptive,
-        inferential, modeling, automation, supervision)
-        ~ "Manager / Supervisor",
-      (modeling >= 3 | automation >= 3) &
-        pmax(modeling, automation) >= pmax(cleaning, descriptive, inferential)
-        ~ "Data Scientist / Engineer",
-      inferential >= 3 &
-        inferential >= pmax(cleaning, descriptive, modeling)
-        ~ "Statistician",
-      (descriptive >= 3 | cleaning >= 3) &
-        pmax(descriptive, cleaning) >= pmax(inferential, modeling)
-        ~ "Data Analyst",
-      TRUE ~ "Generalist"
-    ),
-    job_profile = factor(job_profile, levels = c(
-      "Data Analyst", "Statistician", "Data Scientist / Engineer",
-      "Manager / Supervisor", "Generalist"
-    ))
-  )
-
-clean_data <- clean_data %>%
-  mutate(id = row_number()) %>%
-  left_join(df_scores %>% select(id, job_profile), by = "id") %>%
-  select(-id)
-
-save_barplot_counts(clean_data, "job_profile",
-                    "[TBD] Activity-based job profiles (rules to be validated)",
-                    "jobprofile_distribution.png")
-
-save_donut_counts(clean_data, "job_profile",
-                  title    = "[TBD] Activity-based job profiles",
-                  filename = "donut_jobprofile.png",
-                  drop_na  = TRUE)
-
-df_role_profile <- clean_data %>%
-  filter(!is.na(job_role), !is.na(job_profile)) %>%
-  count(job_profile, job_role, name = "n") %>%
-  group_by(job_profile) %>%
-  slice_max(n, n = 8) %>%
-  mutate(job_role = forcats::fct_reorder(job_role, n)) %>%
-  ungroup()
-
-p_role_profile <- ggplot(df_role_profile, aes(x = n, y = job_role)) +
-  geom_col(fill = my_fill, color = my_border) +
-  facet_wrap(~ job_profile, scales = "free_y", ncol = 2) +
-  labs(title = paste("Table-", table_count,
-                     " [TBD] Top job roles by activity-based profile"),
-       subtitle = "Rules-based profiles — to be validated on real data",
-       x = "N respondents", y = NULL) +
-  theme_minimal(base_size = 10) +
-  theme(plot.title    = element_text(face = "bold"),
-        plot.subtitle = element_text(color = "grey50", face = "italic"),
-        strip.text    = element_text(face = "bold"),
-        panel.grid.major.y = element_blank())
-
-print(p_role_profile)
-ggsave(file.path(out_dir, "jobrole_by_profile_TBD.png"),
-       p_role_profile, width = 14, height = 10, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Genre × Domaine × Lieu (boucles) ─────────────────────────────
-df_field_gender_loc <- clean_data %>%
-  tidyr::unnest_longer(training_fields_list, values_to = "training_field") %>%
-  mutate(training_field = trimws(as.character(training_field))) %>%
-  filter(!is.na(training_field), training_field != "",
-         !is.na(dmgender), !is.na(study_location)) %>%
-  mutate(training_field = factor(training_field, levels = training_field_study))
-
-# Par lieu d'études
-for (loc in levels(df_field_gender_loc$study_location)) {
-  df_g1 <- df_field_gender_loc %>%
-    filter(study_location == loc) %>%
-    count(training_field, dmgender, name = "n") %>%
-    group_by(training_field) %>%
-    mutate(pct = n / sum(n)) %>%
-    ungroup()
-
-  if (nrow(df_g1) == 0) next
-
-  p_g1 <- ggplot(df_g1, aes(x = training_field, y = pct, fill = dmgender)) +
-    geom_col(width = 0.8) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-    scale_fill_manual(values = gender_palette, drop = FALSE) +
-    labs(title = paste0("Table-", table_count,
-                        " Gender by training field — ", loc),
-         x = NULL, y = "Share within field", fill = "Gender") +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(face = "bold"),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          legend.position = "bottom",
-          panel.grid.major.x = element_blank())
-
-  safe_loc <- gsub("[^A-Za-z0-9]+", "_", loc)
-  ggsave(file.path(out_dir, paste0("field_gender_loc_", safe_loc, ".png")),
-         p_g1, width = 14, height = 7, dpi = 300)
-  table_count <<- table_count + 1
-}
-
-# Par genre
-for (gen in levels(df_field_gender_loc$dmgender)) {
-  df_g2 <- df_field_gender_loc %>%
-    filter(dmgender == gen) %>%
-    count(training_field, study_location, name = "n") %>%
-    group_by(training_field) %>%
-    mutate(pct = n / sum(n)) %>%
-    ungroup()
-
-  if (nrow(df_g2) == 0) next
-
-  p_g2 <- ggplot(df_g2,
-    aes(x = training_field, y = pct, fill = study_location)) +
-    geom_col(width = 0.8) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-    scale_fill_brewer(palette = "Set2", drop = FALSE) +
-    labs(title = paste0("Table-", table_count,
-                        " Study location by training field — ", gen),
-         x = NULL, y = "Share within field", fill = "Study location") +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(face = "bold"),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          legend.position = "bottom",
-          panel.grid.major.x = element_blank())
-
-  safe_gen <- gsub("[^A-Za-z0-9]+", "_", gen)
-  ggsave(file.path(out_dir, paste0("field_location_gender_", safe_gen, ".png")),
-         p_g2, width = 14, height = 7, dpi = 300)
-  table_count <<- table_count + 1
-}
-
-# ── Importance activités statistiques par secteur ─────────────────
-importance_palette <- c(
-  "Not at all important" = "#c0392b",
-  "Slightly important"   = "#e09060",
-  "Moderately important" = "#b0b8c1",
-  "Important"            = "#6dbe8d",
-  "Very important"       = "#1a7a4a"
-)
-
-df_us_sec <- clean_data %>%
-  mutate(id = row_number()) %>%
-  select(id, ustime, plsector) %>%
-  tidyr::unnest(ustime) %>%
-  filter(!is.na(importance_code)) %>%
-  mutate(theme      = factor(theme, levels = theme_levels),
-         importance = factor(importance, levels = importance_levels))
-
-plot_importance <- function(data, title) {
-  data %>%
-    count(theme, importance, name = "n") %>%
-    group_by(theme) %>%
-    mutate(pct = n / sum(n)) %>%
-    ungroup() %>%
-    mutate(theme = forcats::fct_reorder(
-      theme,
-      ifelse(importance %in% c("Important", "Very important"), pct, 0), sum
-    )) %>%
-    ggplot(aes(x = pct, y = theme, fill = importance)) +
-    geom_col(width = 0.7) +
-    scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-    scale_fill_manual(values = importance_palette, drop = FALSE) +
-    labs(title = paste("Table-", table_count, " ", title),
-         x = NULL, y = NULL, fill = NULL) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(face = "bold"),
-          panel.grid.major.y = element_blank(),
-          legend.position = "bottom") +
-    guides(fill = guide_legend(nrow = 1))
-}
-
-p_imp_overall <- plot_importance(df_us_sec,
-  "Importance of statistical activities — overall")
-print(p_imp_overall)
-ggsave(file.path(out_dir, "ustime_importance_overall.png"),
-       p_imp_overall, width = 12, height = 6, dpi = 300)
-table_count <<- table_count + 1
-
-for (sec in levels(df_us_sec$plsector)) {
-  df_sec  <- df_us_sec %>% filter(plsector == sec)
-  n_resp  <- n_distinct(df_sec$id)
-  if (n_resp < 5) next
-
-  p_sec <- plot_importance(df_sec,
-    paste0("Importance of statistical activities — ", sec,
-           " (n=", n_resp, ")"))
-  safe_sec <- gsub("[^A-Za-z0-9]+", "_", sec)
-  ggsave(file.path(out_dir, paste0("ustime_importance_sector_", safe_sec, ".png")),
-         p_sec, width = 12, height = 6, dpi = 300)
-  table_count <<- table_count + 1
-}
-
-# ── Expérience et séniorité par secteur ───────────────────────────
-df_sector <- clean_data %>%
-  mutate(plsector = as.character(plsector),
-         plsenior = as.character(plsenior)) %>%
-  filter(!is.na(plsector), plsector != "None", plsector != "NA",
-         !is.na(plsenior), plsenior != "Never worked",
-         !is.na(plyexp)) %>%
-  mutate(plsector = factor(plsector),
-         plsenior = factor(plsenior, levels = seniority_level_levels)) %>%
-  droplevels()
-
-sector_order <- df_sector %>%
-  group_by(plsector) %>%
-  summarise(med = median(plyexp, na.rm = TRUE)) %>%
-  arrange(med) %>%
-  pull(plsector)
-
-p_exp_sector <- df_sector %>%
-  mutate(plsector = factor(plsector, levels = sector_order)) %>%
-  ggplot(aes(x = plyexp, y = plsector)) +
-  geom_boxplot(fill = my_fill, color = "grey30",
-               alpha = 0.7, outlier.size = 1.5) +
-  labs(title = paste("Table-", table_count,
-                     " Years of experience by sector"),
-       x = "Years of experience", y = NULL) +
-  theme_minimal(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"),
-        panel.grid.major.y = element_blank())
-
-print(p_exp_sector)
-ggsave(file.path(out_dir, "experience_by_sector.png"),
-       p_exp_sector, width = 12, height = 10, dpi = 300)
-table_count <<- table_count + 1
-
-seniority_palette <- c(
-  "Intern / Entry level position" = "#c0392b",
-  "No managerial function"        = "#e09060",
-  "Lower management"              = "#b0b8c1",
-  "Middle management"             = "#6dbe8d",
-  "Top management"                = "#1a7a4a",
-  "Never worked"                  = "#cccccc"
-)
-
-sector_order_sen <- df_sector %>%
-  count(plsector, plsenior, name = "n") %>%
-  group_by(plsector) %>%
-  mutate(pct = n / sum(n)) %>%
-  filter(plsenior %in% c("Top management", "Middle management")) %>%
-  summarise(senior_pct = sum(pct)) %>%
-  arrange(senior_pct) %>%
-  pull(plsector)
-
-p_sen_sector <- df_sector %>%
-  count(plsector, plsenior, name = "n") %>%
-  group_by(plsector) %>%
-  mutate(pct = n / sum(n),
-         plsector = factor(plsector, levels = sector_order_sen)) %>%
-  ungroup() %>%
-  ggplot(aes(x = pct, y = plsector, fill = plsenior)) +
-  geom_col(width = 0.8) +
-  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, 1)) +
-  scale_fill_manual(values = seniority_palette, drop = FALSE) +
-  labs(title = paste("Table-", table_count,
-                     " Seniority level by sector"),
-       x = NULL, y = NULL, fill = NULL) +
-  theme_minimal(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"),
-        panel.grid.major.y = element_blank(),
-        legend.position = "bottom") +
-  guides(fill = guide_legend(nrow = 2))
-
-print(p_sen_sector)
-ggsave(file.path(out_dir, "seniority_by_sector.png"),
-       p_sen_sector, width = 13, height = 10, dpi = 300)
-table_count <<- table_count + 1
-
-# ── Formation continue par secteur / séniorité / expérience ───────
-cont_edu_palette <- c(
-  "No"                                                 = "#cccccc",
-  "MAS, DAS, CAS"                                      = "#2C7FB8",
-  "Certified online training (Coursera, Edx, etc.)"    = "#6dbe8d",
-  "Postgraduate in Business/Finance (MBA, EMBA, etc.)" = "#e6a817",
-  "Post-Doc"                                           = "#e05252",
-  "Further training with an employer"                  = "#1a4a7a"
-)
-
-save_donut_counts(clean_data, "continuous_education",
-                  title    = paste("Table-", table_count,
-                                   " Continuous education — overall"),
-                  filename = "cont_edu_overall.png",
-                  palette  = cont_edu_palette, drop_na = TRUE)
-table_count <<- table_count + 1
-
-# Par secteur
-df_cont_sector <- clean_data %>%
-  mutate(plsector = as.character(plsector)) %>%
-  filter(!is.na(plsector), plsector != "None", plsector != "NA",
-         !is.na(continuous_education)) %>%
-  mutate(plsector = factor(plsector))
-
-for (sec in levels(df_cont_sector$plsector)) {
-  df_sec <- df_cont_sector %>% filter(plsector == sec)
-  if (nrow(df_sec) < 5) next
-  safe_sec <- gsub("[^A-Za-z0-9]+", "_", sec)
-  save_donut_counts(df_sec, "continuous_education",
-    title    = paste0("Table-", table_count,
-                      " Continuous education — ", sec, " (n=", nrow(df_sec), ")"),
-    filename = paste0("cont_edu_sector_", safe_sec, ".png"),
-    palette  = cont_edu_palette, drop_na = TRUE)
-  table_count <<- table_count + 1
-}
-
-# Par séniorité
-df_cont_senior <- clean_data %>%
-  mutate(plsenior = as.character(plsenior)) %>%
-  filter(!is.na(plsenior), plsenior != "Never worked",
-         !is.na(continuous_education)) %>%
-  mutate(plsenior = factor(plsenior, levels = seniority_level_levels))
-
-for (sen in levels(df_cont_senior$plsenior)) {
-  df_sen <- df_cont_senior %>% filter(plsenior == sen)
-  if (nrow(df_sen) < 5) next
-  safe_sen <- gsub("[^A-Za-z0-9]+", "_", sen)
-  save_donut_counts(df_sen, "continuous_education",
-    title    = paste0("Table-", table_count,
-                      " Continuous education — ", sen, " (n=", nrow(df_sen), ")"),
-    filename = paste0("cont_edu_seniority_", safe_sen, ".png"),
-    palette  = cont_edu_palette, drop_na = TRUE)
-  table_count <<- table_count + 1
-}
-
-# Par tranche d'expérience
-df_cont_exp <- clean_data %>%
-  filter(!is.na(plyexp), !is.na(continuous_education)) %>%
-  mutate(exp_group = cut(plyexp,
-    breaks = c(0, 5, 10, 20, Inf),
-    labels = c("0–5 years", "6–10 years", "11–20 years", "20+ years"),
-    right = TRUE, include.lowest = TRUE))
-
-for (grp in levels(df_cont_exp$exp_group)) {
-  df_grp <- df_cont_exp %>% filter(exp_group == grp)
-  if (nrow(df_grp) < 5) next
-  safe_grp <- gsub("[^A-Za-z0-9]+", "_", grp)
-  save_donut_counts(df_grp, "continuous_education",
-    title    = paste0("Table-", table_count,
-                      " Continuous education — ", grp, " (n=", nrow(df_grp), ")"),
-    filename = paste0("cont_edu_exp_", safe_grp, ".png"),
-    palette  = cont_edu_palette, drop_na = TRUE)
-  table_count <<- table_count + 1
-}
-
-message("✔ 05_plots_advanced.R terminé")
+message("  ✔ hidden_statistical_roles")
+message("✔ 05_plots_advanced.R terminé — plots dans ", out_dir, "\n")

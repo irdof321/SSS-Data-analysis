@@ -37,6 +37,13 @@ if (!dir.exists(out_dir)) dir.create(out_dir)
 tab_dir <- "descriptives_tables"
 if (!dir.exists(tab_dir)) dir.create(tab_dir)
 
+csv_dir <- "csv_files"
+
+# ── Interrupteur : générer (ou non) le miroir CSV des tables ──────
+generate_csv_files <- TRUE   # mettre FALSE pour désactiver
+
+if (generate_csv_files && !dir.exists(csv_dir)) dir.create(csv_dir)
+
 ####################################################################
 #  Style
 ####################################################################

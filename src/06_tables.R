@@ -62,7 +62,17 @@ style_table <- function(gt_obj, title, subtitle = NULL) {
 save_gt <- function(gt_obj, filename) {
   path <- file.path(tables_dir, filename)
   gtsave(gt_obj, path)
-  message("  → ", path)
+  
+  # Miroir CSV : même sous-dossier que tables_dir, mais sous csv_dir/
+  rel_subdir <- sub(paste0("^", tab_dir, "/?"), "", tables_dir)
+  csv_subdir <- if (rel_subdir == "") csv_dir else file.path(csv_dir, rel_subdir)
+  if (!dir.exists(csv_subdir)) dir.create(csv_subdir, recursive = TRUE)
+  
+  csv_path <- file.path(csv_subdir, sub("\\.png$", ".csv", filename))
+  readr::write_csv(gt_obj[["_data"]], csv_path)
+  message("  → ", csv_path)
+  
+  table_count <<- table_count + 1
 }
 
 # ══════════════════════════════════════════════════════════════════

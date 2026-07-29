@@ -1,0 +1,11 @@
+Skill,N,Mean score,% Satisfied,% Dissatisfied
+"Statistical programming (R, SAS, Python
+(Statistics and ML libraries), SPSS, Stata,
+etc.)",80,3.65,0.5875,0.125
+Scientific writing and/or research,65,3.5384615384615383,0.6153846153846154,0.18461538461538463
+"Data visualization (Power BI, Tableau, Looker
+Studio, etc.)",77,3.5064935064935066,0.5844155844155844,0.2077922077922078
+Project management,72,3.4722222222222223,0.5972222222222222,0.19444444444444445
+"Other programming (C, C++, Java, Python,
+etc.)",73,3.4383561643835616,0.547945205479452,0.1917808219178082
+Time management,92,3.3260869565217392,0.5108695652173914,0.2391304347826087

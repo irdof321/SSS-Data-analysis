@@ -1,0 +1,9 @@
+Statistical activity,N,Mean importance,% Important+,% Active use
+Data cleaning and preparation,300,2.06,0.4266666666666667,0.7866666666666666
+"Supervision or validation of statistical
+work carried out by others",300,2.0733333333333333,0.42333333333333334,0.78
+Descriptive analysis,300,2.013333333333333,0.42,0.7633333333333333
+Inferential analysis,300,2.1066666666666665,0.41,0.77
+Modeling / Machine learning,300,2.026666666666667,0.39,0.7266666666666667
+"Development or automation of statistical
+tools",300,1.9,0.36,0.77

@@ -1,26 +1,23 @@
 Job profile,Job title,N
-Data Analyst,Data Scientist,5
-Data Analyst,Professor,5
-Data Analyst,Senior Statistician,5
-Data Analyst,Student,5
-Data Analyst,Epidemiologist,4
-Statistician,Consultant,7
-Statistician,Student,6
-Statistician,Biostatistician,5
-Statistician,Epidemiologist,5
-Statistician,Data Scientist,3
-Data Scientist / Engineer,Student,11
-Data Scientist / Engineer,PhD student,9
-Data Scientist / Engineer,Consultant,8
-Data Scientist / Engineer,Epidemiologist,8
+Data Analyst,Statistician,7
+Data Analyst,Collaborateur scientifique,2
+Data Analyst,Data analyst,2
+Data Analyst,Data scientist,2
+Data Analyst,Biostatistician,1
+Statistician,Biostatistician,3
+Statistician,Statistician,3
+Statistician,Professor of statistics,2
+Statistician,Analytical Scientist and Statistician,1
+Statistician,Data analyst,1
 Data Scientist / Engineer,Biostatistician,7
-Manager / Supervisor,Student,13
-Manager / Supervisor,Senior Statistician,7
-Manager / Supervisor,Biostatistician,6
-Manager / Supervisor,PhD student,6
-Manager / Supervisor,Consultant,5
-Generalist,Consultant,2
-Generalist,ML Engineer,2
-Generalist,Postdoc,2
-Generalist,Research Scientist,2
-Generalist,Statistician,2
+Data Scientist / Engineer,Data scientist,6
+Data Scientist / Engineer,Research statistician (methodological / theoretical),6
+Data Scientist / Engineer,Professor of statistics,3
+Data Scientist / Engineer,Statistician,3
+Manager / Supervisor,Biostatistician,16
+Manager / Supervisor,Statistician,8
+Manager / Supervisor,Professor of statistics,6
+Manager / Supervisor,Data scientist,2
+Manager / Supervisor,Statistical programmer,2
+Generalist,Scientific advisor,1
+Generalist,Statistician,1

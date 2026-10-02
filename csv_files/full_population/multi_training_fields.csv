@@ -1,20 +1,17 @@
 Category,N,% of respondents
-"Health, sport",34,0.11333333333333333
-Other,33,0.11
-Applied statistics,31,0.10333333333333333
-Mathematics,31,0.10333333333333333
-Science of economics,30,0.1
-Psychology,28,0.09333333333333334
-Education,27,0.09
-"Natural science, environmental science",27,0.09
-"Language, literature",26,0.08666666666666667
-Other social sciences,26,0.08666666666666667
-Statistics,26,0.08666666666666667
-Law,23,0.07666666666666666
-Data science,22,0.07333333333333333
-"Art, music, design",20,0.06666666666666667
-"History, civilizations study",20,0.06666666666666667
-Theology,20,0.06666666666666667
-Informatics / Computer science,17,0.056666666666666664
-"Technical science, engineering",17,0.056666666666666664
-Sociology,13,0.043333333333333335
+Statistics,48,0.34782608695652173
+Mathematics,22,0.15942028985507245
+"Natural science, environmental science",19,0.13768115942028986
+Psychology,14,0.10144927536231885
+Science of economics,12,0.08695652173913043
+Applied statistics,11,0.07971014492753623
+Data science,8,0.057971014492753624
+Informatics / Computer science,7,0.050724637681159424
+Other social sciences,7,0.050724637681159424
+"Health, sport",6,0.043478260869565216
+"Technical science, engineering",4,0.028985507246376812
+Sociology,2,0.014492753623188406
+0,1,0.007246376811594203
+Education,1,0.007246376811594203
+"History, civilizations study",1,0.007246376811594203
+Other,1,0.007246376811594203

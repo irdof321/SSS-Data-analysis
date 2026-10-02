@@ -193,14 +193,60 @@ save_boxplot <- function(df, numvar, title, filename,
                          groupvar = NULL, subtitle = NULL,
                          order_by_median = TRUE, drop_na = TRUE,
                          zoom = TRUE, zoom_factor = 1.8,
+                         min_n = SALARY_BOXPLOT_MIN_N,
+                         show_group_n = SALARY_BOXPLOT_SHOW_N,
+                         show_key = SALARY_BOXPLOT_SHOW_KEY,
                          pop_label = "All respondents") {
-  dd <- df %>% filter(!is.na(.data[[numvar]]))
-  
-  # ── Zoom : borne l'axe sur Q3 + zoom_factor*IQR (calculé sur
-  # l'ensemble des données, pas groupe par groupe) pour que quelques
-  # valeurs extrêmes n'écrasent pas la lecture des boîtes. Les points
-  # au-delà restent dans les données (le boxplot les calcule toujours),
-  # seule la fenêtre affichée est recadrée — une note l'indique.
+  # Base-R subsetting is used here on purpose to avoid tidy-evaluation/version
+  # conflicts when variable names are supplied as strings.
+  keep_num <- !is.na(df[[numvar]])
+  dd <- df[keep_num, , drop = FALSE]
+
+  if (nrow(dd) == 0) return(invisible(NULL))
+
+  if (!is.null(groupvar)) {
+    if (drop_na) {
+      grp_chr <- as.character(dd[[groupvar]])
+      keep_grp <- !is.na(dd[[groupvar]]) & grp_chr != ""
+      dd <- dd[keep_grp, , drop = FALSE]
+    }
+    if (nrow(dd) == 0) return(invisible(NULL))
+
+    # Remove groups with too few observations for an interpretable boxplot.
+    grp_chr <- as.character(dd[[groupvar]])
+    grp_counts <- table(grp_chr)
+    keep_levels <- names(grp_counts)[grp_counts >= min_n]
+    dd <- dd[grp_chr %in% keep_levels, , drop = FALSE]
+    if (nrow(dd) == 0) return(invisible(NULL))
+
+    grp_chr <- as.character(dd[[groupvar]])
+    grp_counts <- table(grp_chr)
+
+    # Determine the display order using the raw group labels first.
+    if (order_by_median) {
+      med <- tapply(dd[[numvar]], grp_chr, median, na.rm = TRUE)
+      med <- med[!is.na(med)]
+      ord <- names(sort(med))
+    } else {
+      lvls <- levels(df[[groupvar]])
+      if (!is.null(lvls)) {
+        ord <- lvls[lvls %in% names(grp_counts)]
+      } else {
+        ord <- unique(grp_chr)
+      }
+    }
+
+    # Add n to the axis label without altering the underlying grouping variable.
+    label_map <- setNames(
+      if (show_group_n) paste0(names(grp_counts), " (n=", as.integer(grp_counts), ")")
+      else names(grp_counts),
+      names(grp_counts)
+    )
+    dd$.grp <- factor(label_map[grp_chr], levels = unname(label_map[ord]))
+  }
+
+  # Axis zoom is calculated AFTER small groups have been removed, so excluded
+  # groups cannot determine the plotting range.
   x_max <- max(dd[[numvar]], na.rm = TRUE)
   x_upper <- x_max
   n_hidden <- 0
@@ -212,49 +258,60 @@ save_boxplot <- function(df, numvar, title, filename,
     if (x_upper < x_max) {
       n_hidden <- sum(dd[[numvar]] > x_upper, na.rm = TRUE)
     } else {
-      x_upper <- x_max  # pas d'outlier extrême : pas de recadrage nécessaire
+      x_upper <- x_max
     }
   }
+
   zoom_note <- if (n_hidden > 0)
     paste0(n_hidden, " extreme value(s) beyond this range not shown (axis zoomed for readability)")
   else NULL
-  
+
   if (!is.null(groupvar)) {
-    if (drop_na) dd <- dd %>% filter(!is.na(.data[[groupvar]]), .data[[groupvar]] != "")
-    if (nrow(dd) == 0) return(invisible(NULL))
-    
-    if (order_by_median) {
-      dd <- dd %>% mutate(.grp = forcats::fct_reorder(as.character(.data[[groupvar]]),
-                                                      .data[[numvar]], median, .na_rm = TRUE))
-    } else {
-      dd <- dd %>% mutate(.grp = as.character(.data[[groupvar]]))
-      lvls <- levels(df[[groupvar]])
-      if (!is.null(lvls)) dd <- dd %>% mutate(.grp = factor(.grp, levels = lvls))
-    }
-    
-    full_subtitle <- sss_wrap_subtitle(paste0(subtitle %||% "", if (!is.null(subtitle) && !is.null(zoom_note)) " — " else "", zoom_note %||% ""))
-    
+    full_subtitle <- sss_wrap_subtitle(paste0(
+      subtitle %||% "",
+      if (!is.null(subtitle) && !is.null(zoom_note)) " — " else "",
+      zoom_note %||% ""
+    ))
+
+    key_note <- if (show_key)
+      "Boxplot key: red diamond = mean; centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
+    else NULL
+    min_note <- if (min_n > 1) paste0("Groups with n < ", min_n, " are not shown.") else NULL
+    caption_parts <- c(sss_caption_note(nrow(dd), pop_label), min_note, key_note)
+    caption_parts <- caption_parts[!is.na(caption_parts) & caption_parts != ""]
+    full_caption <- stringr::str_wrap(paste(caption_parts, collapse = "  |  "), width = 125)
+
     p <- ggplot(dd, aes(x = .grp, y = .data[[numvar]])) +
       geom_boxplot(fill = sss_blue, alpha = 0.55, outlier.alpha = 0.35,
                    width = 0.55, color = sss_blue_dark, linewidth = 0.4) +
       stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "#d62728") +
       coord_flip(ylim = c(NA, x_upper)) +
       labs(title = sss_wrap_title(title), subtitle = full_subtitle,
-           caption = sss_caption_note(nrow(dd), pop_label)) +
+           caption = full_caption) +
       theme_sss(horizontal = TRUE)
-    
-    save_plot(p, filename, height = max(4, 0.5 * length(unique(dd$.grp)) + 1.8))
-    
+
+    save_plot(p, filename, height = max(4, 0.5 * length(unique(dd$.grp)) + 2.2))
+
   } else {
-    if (nrow(dd) == 0) return(invisible(NULL))
-    full_subtitle <- sss_wrap_subtitle(paste0(subtitle %||% "", if (!is.null(subtitle) && !is.null(zoom_note)) " — " else "", zoom_note %||% ""), width_in = 4)
+    full_subtitle <- sss_wrap_subtitle(paste0(
+      subtitle %||% "",
+      if (!is.null(subtitle) && !is.null(zoom_note)) " — " else "",
+      zoom_note %||% ""
+    ), width_in = 4)
+
+    key_note <- if (show_key)
+      "Boxplot key: red diamond = mean; centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
+    else NULL
+    caption_parts <- c(sss_caption_note(nrow(dd), pop_label), key_note)
+    full_caption <- stringr::str_wrap(paste(caption_parts, collapse = "  |  "), width = 70)
+
     p <- ggplot(dd, aes(x = "", y = .data[[numvar]])) +
       geom_boxplot(fill = sss_blue, alpha = 0.55, outlier.alpha = 0.35,
                    width = 0.35, color = sss_blue_dark, linewidth = 0.4) +
       stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "#d62728") +
       coord_cartesian(ylim = c(NA, x_upper)) +
       labs(title = sss_wrap_title(title, width_in = 4), subtitle = full_subtitle,
-           caption = sss_caption_note(nrow(dd), pop_label)) +
+           caption = full_caption) +
       theme_sss(horizontal = FALSE) +
       theme(axis.text.x = element_blank())
     save_plot(p, filename, width = 4, height = 6)
@@ -312,54 +369,130 @@ save_bar_multi <- function(df, listvar, title, filename,
 }
 
 # ══════════════════════════════════════════════════════════════════
-#  HEATMAP — croisement de 2 variables catégorielles (counts)
-#  Remplace le bar chart empilé dès que les 2 variables ont beaucoup
-#  de catégories : plus lisible, et reprend l'esprit du data_color()
-#  utilisé dans make_crosstab_table() côté tables.
+#  HEATMAPS
+#  - save_heatmap_crosstab(): counts
+#  - save_heatmap_mean(): mean of a numeric variable
+#  - save_heatmap_share(): respondent-level share (multi-select friendly)
+#
+#  Layout is deliberately generous because long row labels otherwise overlap.
 # ══════════════════════════════════════════════════════════════════
+.heatmap_layout <- function(tab, title, subtitle, caption, filename,
+                            fill_var, label_var, fill_domain = NULL,
+                            plot_width = NULL, row_wrap_width = NULL,
+                            col_wrap_width = NULL) {
+  if (nrow(tab) == 0) return(invisible(NULL))
+
+  if (!is.null(row_wrap_width))
+    tab$.row <- stringr::str_wrap(as.character(tab$.row), width = row_wrap_width)
+  if (!is.null(col_wrap_width))
+    tab$.col <- stringr::str_wrap(as.character(tab$.col), width = col_wrap_width)
+
+  # Stable ordering: rows with the largest overall signal at the top.
+  row_score <- tapply(tab[[fill_var]], tab$.row, function(x) mean(x, na.rm = TRUE))
+  row_order <- names(sort(row_score, na.last = TRUE))
+  tab$.row <- factor(tab$.row, levels = row_order)
+
+  n_cols <- length(unique(tab$.col))
+  n_rows <- length(unique(tab$.row))
+  if (is.null(plot_width)) plot_width <- max(9.5, 1.7 * n_cols + 4.5)
+  plot_height <- max(5.5, 0.90 * n_rows + 2.6)
+
+  vals <- tab[[fill_var]]
+  threshold <- if (!is.null(fill_domain)) mean(fill_domain) else {
+    if (all(is.na(vals))) 0 else max(vals, na.rm = TRUE) * 0.55
+  }
+
+  p <- ggplot(tab, aes(x = .col, y = .row, fill = .data[[fill_var]])) +
+    geom_tile(color = sss_bg, linewidth = 1.5) +
+    geom_text(aes(label = .data[[label_var]],
+                  color = .data[[fill_var]] > threshold),
+              size = 3.3, fontface = "bold", show.legend = FALSE) +
+    scale_color_manual(values = c(`TRUE` = "white", `FALSE` = sss_blue_dark)) +
+    scale_fill_gradient(low = "#eaf2fa", high = sss_blue_dark,
+                        limits = fill_domain, guide = "none") +
+    labs(title = sss_wrap_title(title, width_in = plot_width),
+         subtitle = sss_wrap_subtitle(subtitle, width_in = plot_width),
+         caption = caption) +
+    theme_sss(horizontal = TRUE) +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.y = element_text(size = 10.5, lineheight = 0.90,
+                                 margin = margin(r = 10)),
+      axis.text.x = element_text(angle = 40, hjust = 1, vjust = 1,
+                                 size = 10.5, lineheight = 0.90),
+      plot.margin = margin(18, 60, 55, 35)
+    )
+
+  save_plot(p, filename, width = plot_width, height = plot_height)
+}
+
 save_heatmap_crosstab <- function(df, rowvar, colvar, title, filename,
                                   subtitle = NULL, wrap_width = NULL,
                                   col_wrap_width = NULL,
-                                  pop_label = "All respondents") {
+                                  pop_label = "All respondents",
+                                  caption_n = NULL) {
   dd <- df %>% filter(!is.na(.data[[rowvar]]), !is.na(.data[[colvar]]))
   if (nrow(dd) == 0) return(invisible(NULL))
-  
-  tab <- dd %>% count(.data[[rowvar]], .data[[colvar]], name = "N")
+
+  tab <- dd %>% count(.data[[rowvar]], .data[[colvar]], name = "value")
   names(tab)[1:2] <- c(".row", ".col")
-  
-  if (!is.null(wrap_width)) {
-    tab <- tab %>% mutate(.row = stringr::str_wrap(as.character(.row), width = wrap_width))
-  }
-  if (!is.null(col_wrap_width)) {
-    tab <- tab %>% mutate(.col = stringr::str_wrap(as.character(.col), width = col_wrap_width))
-  }
-  
-  # tri des lignes par total décroissant (les + gros effectifs en haut)
-  row_order <- tab %>% summarise(tot = sum(N), .by = .row) %>% arrange(tot) %>% pull(.row)
-  tab <- tab %>% mutate(.row = factor(.row, levels = row_order))
-  
-  n_cols <- length(unique(tab$.col))
-  # largeur dynamique : évite les colonnes écrasées quand il y a beaucoup
-  # de catégories (ex: sectors, job titles) — calculée AVANT le titre pour
-  # que le wrap du texte corresponde à la largeur réelle du graphe.
-  plot_width <- max(8.5, 1.5 * n_cols + 3)
-  
-  p <- ggplot(tab, aes(x = .col, y = .row, fill = N)) +
-    geom_tile(color = sss_bg, linewidth = 1.5) +
-    geom_text(aes(label = N,
-                  color = N > max(tab$N) * 0.55),
-              size = 3.3, fontface = "bold", show.legend = FALSE) +
-    scale_color_manual(values = c(`TRUE` = "white", `FALSE` = sss_blue_dark)) +
-    scale_fill_gradient(low = "#eaf2fa", high = sss_blue_dark, guide = "none") +
-    labs(title = sss_wrap_title(title, width_in = plot_width),
-         subtitle = sss_wrap_subtitle(subtitle, width_in = plot_width),
-         caption = sss_caption_note(nrow(dd), pop_label)) +
-    theme_sss(horizontal = TRUE) +
-    theme(panel.grid = element_blank(),
-          axis.text.x = element_text(angle = 40, hjust = 1, vjust = 1),
-          plot.margin = margin(18, 60, 30, 18))  # marge basse élargie pour les labels x en biais
-  
-  save_plot(p, filename, width = plot_width, height = max(4, 0.5 * length(row_order) + 1.8))
+  tab$label <- as.character(tab$value)
+
+  n_cap <- caption_n %||% nrow(dd)
+  .heatmap_layout(tab, title, subtitle, sss_caption_note(n_cap, pop_label), filename,
+                  fill_var = "value", label_var = "label",
+                  row_wrap_width = wrap_width, col_wrap_width = col_wrap_width)
+}
+
+save_heatmap_mean <- function(df, rowvar, colvar, valuevar, title, filename,
+                              subtitle = NULL, wrap_width = NULL,
+                              col_wrap_width = NULL,
+                              pop_label = "All respondents",
+                              caption_n = NULL, digits = 1,
+                              fill_domain = NULL) {
+  dd <- df %>%
+    filter(!is.na(.data[[rowvar]]), !is.na(.data[[colvar]]),
+           !is.na(.data[[valuevar]]))
+  if (nrow(dd) == 0) return(invisible(NULL))
+
+  tab <- dd %>%
+    group_by(.data[[rowvar]], .data[[colvar]]) %>%
+    summarise(value = mean(.data[[valuevar]], na.rm = TRUE), .groups = "drop")
+  names(tab)[1:2] <- c(".row", ".col")
+  tab$label <- formatC(tab$value, format = "f", digits = digits)
+
+  n_cap <- caption_n %||% nrow(dd)
+  .heatmap_layout(tab, title, subtitle, sss_caption_note(n_cap, pop_label), filename,
+                  fill_var = "value", label_var = "label", fill_domain = fill_domain,
+                  row_wrap_width = wrap_width, col_wrap_width = col_wrap_width)
+}
+
+save_heatmap_share <- function(df, rowvar, colvar, idvar, title, filename,
+                               subtitle = NULL, wrap_width = NULL,
+                               col_wrap_width = NULL,
+                               pop_label = "All respondents",
+                               caption_n = NULL,
+                               denominator = c("row", "col")) {
+  denominator <- match.arg(denominator)
+  dd <- df %>%
+    filter(!is.na(.data[[rowvar]]), !is.na(.data[[colvar]]), !is.na(.data[[idvar]]))
+  if (nrow(dd) == 0) return(invisible(NULL))
+
+  denom_var <- if (denominator == "row") rowvar else colvar
+  denom <- dd %>% distinct(.data[[denom_var]], .data[[idvar]]) %>%
+    count(.data[[denom_var]], name = ".denom")
+  numer <- dd %>% distinct(.data[[rowvar]], .data[[colvar]], .data[[idvar]]) %>%
+    count(.data[[rowvar]], .data[[colvar]], name = ".num")
+  tab <- numer %>% left_join(denom, by = denom_var) %>%
+    mutate(value = .num / .denom,
+           label = scales::percent(value, accuracy = 1)) %>%
+    select(all_of(rowvar), all_of(colvar), value, label)
+  names(tab)[1:2] <- c(".row", ".col")
+
+  n_cap <- caption_n %||% dplyr::n_distinct(dd[[idvar]])
+  .heatmap_layout(tab, title, subtitle, sss_caption_note(n_cap, pop_label), filename,
+                  fill_var = "value", label_var = "label", fill_domain = c(0, 1),
+                  row_wrap_width = wrap_width, col_wrap_width = col_wrap_width)
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -368,7 +501,7 @@ save_heatmap_crosstab <- function(df, rowvar, colvar, title, filename,
 save_rate_bar <- function(df, groupvar, boolvar, title, filename,
                           subtitle = NULL, group_order = NULL,
                           sort_by = c("rate", "order", "freq"),
-                          min_n = 5, pop_label = "All respondents") {
+                          min_n = GROUP_MIN_N, pop_label = "All respondents") {
   sort_by <- match.arg(sort_by)
   
   tab <- df %>%
@@ -535,6 +668,106 @@ save_stacked_100_bar <- function(df, groupvar, catvar, title, filename,
     guides(fill = guide_legend(nrow = ceiling(n_cat / 3), byrow = TRUE))
   
   save_plot(p, filename, height = max(4.5, 0.5 * length(unique(tab$.grp)) + 0.35 * ceiling(n_cat / 3) + 2.2))
+}
+
+
+
+# ══════════════════════════════════════════════════════════════════
+# SALARY DISTRIBUTIONS
+# ══════════════════════════════════════════════════════════════════
+# The questionnaire observes salary BANDS, not exact salaries.
+# We therefore keep two distinct views:
+#   1) observed declared bands (no FTE transformation), and
+#   2) an approximate continuous 100%-FTE distribution based on each
+#      respondent's band midpoint and individual work rate.
+#
+# `salary_fte_mid` is a point estimate. `salary_fte_low` and
+# `salary_fte_high` retain the transformed interval whenever the original
+# band bound is known.
+
+salary_fte_stats <- function(df) {
+  x <- df$salary_fte_mid
+  x <- x[!is.na(x) & is.finite(x)]
+  if (length(x) == 0) {
+    return(list(n = 0L, mean = NA_real_, median = NA_real_))
+  }
+  list(
+    n = length(x),
+    mean = mean(x),
+    median = median(x)
+  )
+}
+
+save_salary_band_distribution <- function(df, title, filename,
+                                          subtitle = NULL,
+                                          pop_label = "All respondents") {
+  dd <- df %>% filter(!is.na(salary_band))
+  if (nrow(dd) == 0) return(invisible(NULL))
+
+  tab <- dd %>%
+    count(salary_band, .drop = FALSE, name = "n") %>%
+    filter(n > 0) %>%
+    mutate(pct = n / sum(n))
+
+  p <- ggplot(tab, aes(x = salary_band, y = n)) +
+    geom_col(fill = sss_blue, width = 0.72) +
+    geom_text(aes(label = paste0(n, " (", scales::percent(pct, accuracy = 0.1), ")")),
+              vjust = -0.5, size = 3.1, color = sss_grey_text) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(
+      title = sss_wrap_title(title, width_in = 12),
+      subtitle = sss_wrap_subtitle(subtitle, width_in = 12),
+      caption = sss_caption_note(nrow(dd), pop_label),
+      x = "Declared gross annual salary band (CHF)", y = "Respondents"
+    ) +
+    theme_sss(horizontal = FALSE) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+          plot.margin = margin(18, 22, 42, 18))
+
+  save_plot(p, filename, width = 12, height = 7)
+}
+
+save_salary_fte_distribution <- function(df, title, filename,
+                                         subtitle = NULL,
+                                         binwidth = 10000,
+                                         pop_label = "All respondents") {
+  dd <- df %>% filter(!is.na(salary_fte_mid), is.finite(salary_fte_mid))
+  if (nrow(dd) == 0) return(invisible(NULL))
+
+  st <- salary_fte_stats(dd)
+  fmt_chf <- function(x) paste0("CHF ", format(round(x), big.mark = "'", scientific = FALSE))
+
+  note <- paste0(
+    "Midpoint-based FTE estimate: mean = ", fmt_chf(st$mean),
+    "; median = ", fmt_chf(st$median), "."
+  )
+  full_subtitle <- paste0(
+    subtitle %||% "",
+    if (!is.null(subtitle) && nzchar(subtitle)) " — " else "",
+    note
+  )
+
+  p <- ggplot(dd, aes(x = salary_fte_mid)) +
+    geom_histogram(binwidth = binwidth, boundary = 0,
+                   fill = sss_blue, color = sss_bg, linewidth = 0.4) +
+    geom_vline(xintercept = st$mean, linetype = "dashed", linewidth = 0.8,
+               color = "#d62728") +
+    geom_vline(xintercept = st$median, linetype = "dotted", linewidth = 0.9,
+               color = sss_blue_dark) +
+    labs(
+      title = sss_wrap_title(title, width_in = 11),
+      subtitle = sss_wrap_subtitle(full_subtitle, width_in = 11),
+      caption = paste0(
+        sss_caption_note(nrow(dd), pop_label),
+        " | Dashed line = approximate mean; dotted line = approximate median. ",
+        "FTE = salary-band midpoint / work rate × 100."
+      ),
+      x = "Approximate full-time-equivalent salary (CHF)", y = "Respondents"
+    ) +
+    scale_x_continuous(labels = scales::label_number(big.mark = "'")) +
+    theme_sss(horizontal = FALSE)
+
+  save_plot(p, filename, width = 11, height = 6.5)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

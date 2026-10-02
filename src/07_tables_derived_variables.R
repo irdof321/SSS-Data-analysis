@@ -452,7 +452,7 @@ sector_counts <- clean_data |>
   filter(!is.na(plsector), as.character(plsector) != "None") |>
   count(plsector, name = "N")
 
-sectors_eligible <- sector_counts |> filter(N >= 5) |> pull(plsector) |> as.character()
+sectors_eligible <- sector_counts |> filter(N >= GROUP_MIN_N) |> pull(plsector) |> as.character()
 n_sectors_excluded <- sum(sector_counts$N < 5)
 
 sector_note <- paste0(
@@ -461,7 +461,7 @@ sector_note <- paste0(
   sum(sector_counts$N[sector_counts$N < 5]), " respondent(s))."
 )
 
-message("✔ Secteurs éligibles (n≥5) : ", length(sectors_eligible), " / ",
+message("✔ Secteurs éligibles (n≥", GROUP_MIN_N, ") : ", length(sectors_eligible), " / ",
         nrow(sector_counts))
 
 # ══════════════════════════════════════════════════════════════════
@@ -732,36 +732,43 @@ clean_data$workrate_group <- cut(
 )
 
 # Salary, grouped in quartiles (pour la stratification satisfaction × salaire)
-salary_quartiles <- quantile(clean_data$salary, c(0, .25, .5, .75, 1), na.rm = TRUE)
-clean_data$salary_group <- cut(
-  clean_data$salary,
-  breaks = salary_quartiles,
-  labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"),
-  include.lowest = TRUE
-)
+if (ANALYZE_SALARY) {
+  clean_data$salary_group <- factor(
+    dplyr::case_when(
+      is.na(clean_data$salary_fte_mid) ~ NA_character_,
+      TRUE ~ c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)")[dplyr::ntile(clean_data$salary_fte_mid, 4)]
+    ),
+    levels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)")
+  )
+} else {
+  clean_data$salary_group <- factor(rep(NA_character_, nrow(clean_data)),
+                                    levels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"))
+}
 
 # Score de satisfaction numérique — échelle inversée pour que
 # "plus haut = plus satisfait" (5 = Very satisfied, 1 = Not at all)
 clean_data$satisf_score <- length(work_satisfaction_levels) + 1 -
   as.integer(clean_data$worksatisfction)
 
-message("✔ Variables dérivées ajoutées : workrate_group, salary_group, satisf_score")
+message("✔ Variables dérivées ajoutées : workrate_group, salary_group, satisf_score",
+        if (!ANALYZE_SALARY) " (salary analysis temporarily disabled)" else "")
 
 # ── Work region éligible (n >= 5), exclut "I do not work" ──────────
 dmwork_counts <- clean_data |>
-  filter(!is.na(dmwork), dmwork != "I do not work") |>
+  filter(!is.na(dmwork), dmwork != "I do not work", !is.na(salary_fte_mid)) |>
   count(dmwork, name = "N")
 
-dmwork_eligible <- dmwork_counts |> filter(N >= 5) |> pull(dmwork) |> as.character()
-n_dmwork_excluded <- sum(dmwork_counts$N < 5)
+dmwork_eligible <- dmwork_counts |> filter(N >= GROUP_MIN_N) |> pull(dmwork) |> as.character()
+n_dmwork_excluded <- sum(dmwork_counts$N < GROUP_MIN_N)
 
 dmwork_note <- paste0(
-  "Work regions (canton) with fewer than 5 respondents are excluded (",
-  n_dmwork_excluded, " region(s) excluded, covering ",
-  sum(dmwork_counts$N[dmwork_counts$N < 5]), " respondent(s))."
+  "Work regions (canton) with fewer than ", GROUP_MIN_N,
+  " respondents are excluded (", n_dmwork_excluded,
+  " region(s) below the overall location threshold, covering ",
+  sum(dmwork_counts$N[dmwork_counts$N < GROUP_MIN_N]), " respondent(s))."
 )
 
-message("✔ Régions de travail éligibles (n≥5) : ", length(dmwork_eligible), " / ",
+message("✔ Régions de travail éligibles (n≥", GROUP_MIN_N, ") : ", length(dmwork_eligible), " / ",
         nrow(dmwork_counts))
 
 # ══════════════════════════════════════════════════════════════════
@@ -774,7 +781,7 @@ make_grouped_numeric_table <- function(df, groupvar, numvar, title, filename,
                                        group_order = NULL,
                                        sort_desc   = TRUE,
                                        unit        = "",
-                                       min_n       = 5) {
+                                       min_n       = GROUP_MIN_N) {
   tab <- df |>
     filter(!is.na(.data[[groupvar]]), !is.na(.data[[numvar]])) |>
     group_by(.data[[groupvar]]) |>
@@ -839,7 +846,7 @@ make_grouped_numeric_table <- function(df, groupvar, numvar, title, filename,
 make_satisfaction_by_group_table <- function(df, groupvar, title, filename,
                                              subtitle    = NULL,
                                              group_order = NULL,
-                                             min_n       = 5) {
+                                             min_n       = GROUP_MIN_N) {
   tab <- df |>
     filter(!is.na(.data[[groupvar]]), !is.na(worksatisfction)) |>
     group_by(.data[[groupvar]]) |>
@@ -900,71 +907,78 @@ make_satisfaction_by_group_table <- function(df, groupvar, title, filename,
 #  seniority level, age group, work region, and gender.
 # ══════════════════════════════════════════════════════════════════
 
+if (ANALYZE_SALARY) {
 # a) By sector of employment (n>=5 sectors, cf. section 5.3.2)
 make_grouped_numeric_table(
   clean_data |> filter(as.character(plsector) %in% sectors_eligible),
-  "plsector", "salary",
+  "plsector", "salary_fte_mid",
   title    = "Salary levels, by sector of employment",
   filename = "salary_by_sector.png",
-  subtitle = paste0("Full-time equivalent (100% workload), in CHF. ", sector_note),
+  subtitle = paste0("Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band. ", sector_note),
   unit     = "CHF"
 )
 
 # b) By work position (job title)
-make_grouped_numeric_table(clean_data, "job_role", "salary",
+make_grouped_numeric_table(clean_data, "job_role", "salary_fte_mid",
                            title    = "Salary levels, by work position (job title)",
                            filename = "salary_by_jobrole.png",
-                           subtitle = "Full-time equivalent (100% workload), in CHF",
+                           subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            unit     = "CHF")
 
 # c) By degree level
-make_grouped_numeric_table(clean_data, "trlvl", "salary",
+make_grouped_numeric_table(clean_data, "trlvl", "salary_fte_mid",
                            title       = "Salary levels, by highest degree obtained",
                            filename    = "salary_by_degree.png",
-                           subtitle    = "Full-time equivalent (100% workload), in CHF",
+                           subtitle    = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            group_order = education_level,
                            unit        = "CHF")
 
 # d) By years of professional experience
-make_grouped_numeric_table(clean_data, "exp_group", "salary",
+make_grouped_numeric_table(clean_data, "exp_group", "salary_fte_mid",
                            title       = "Salary levels, by years of professional experience",
                            filename    = "salary_by_experience.png",
-                           subtitle    = "Full-time equivalent (100% workload), in CHF",
+                           subtitle    = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            group_order = levels(clean_data$exp_group),
                            unit        = "CHF")
 
 # e) By seniority level
-make_grouped_numeric_table(clean_data, "plsenior", "salary",
+make_grouped_numeric_table(clean_data, "plsenior", "salary_fte_mid",
                            title       = "Salary levels, by seniority level",
                            filename    = "salary_by_seniority.png",
-                           subtitle    = "Full-time equivalent (100% workload), in CHF",
+                           subtitle    = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            group_order = seniority_level_levels,
                            unit        = "CHF")
 
 # f) By age group
-make_grouped_numeric_table(clean_data, "age_group", "salary",
+make_grouped_numeric_table(clean_data, "age_group", "salary_fte_mid",
                            title       = "Salary levels, by age group",
                            filename    = "salary_by_age_group.png",
-                           subtitle    = "Full-time equivalent (100% workload), in CHF",
+                           subtitle    = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            group_order = levels(clean_data$age_group),
                            unit        = "CHF")
 
 # g) By work region (canton, n>=5)
 make_grouped_numeric_table(
   clean_data |> filter(as.character(dmwork) %in% dmwork_eligible),
-  "dmwork", "salary",
+  "dmwork", "salary_fte_mid",
   title    = "Salary levels, by work region (canton)",
   filename = "salary_by_work_region.png",
-  subtitle = paste0("Full-time equivalent (100% workload), in CHF. ", dmwork_note),
+  subtitle = paste0("Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band. ",
+                    "Each displayed canton must also have at least ", GROUP_MIN_N,
+                    " usable salary observations. ", dmwork_note),
   unit     = "CHF"
 )
 
 # h) By gender
-make_grouped_numeric_table(clean_data, "dmgender", "salary",
+make_grouped_numeric_table(clean_data, "dmgender", "salary_fte_mid",
                            title    = "Salary levels, by gender",
                            filename = "salary_by_gender.png",
-                           subtitle = "Full-time equivalent (100% workload), in CHF",
+                           subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
                            unit     = "CHF")
+
+} else {
+  message("↷ 5.3.3 (1) — Salary levels skipped: salary question is categorical and analysis is pending")
+}
 
 message("✔ 5.3.3 (1) — Salary levels")
 
@@ -996,11 +1010,13 @@ make_satisfaction_by_group_table(clean_data, "plsenior",
                                  group_order = seniority_level_levels)
 
 # d) By salary (quartile groups)
-make_satisfaction_by_group_table(clean_data, "salary_group",
-                                 title       = "Job satisfaction, by salary level (quartiles)",
-                                 filename    = "satisfaction_by_salary.png",
-                                 subtitle    = "Quartiles computed on full-time equivalent salary",
-                                 group_order = levels(clean_data$salary_group))
+if (ANALYZE_SALARY) {
+  make_satisfaction_by_group_table(clean_data, "salary_group",
+                                   title       = "Job satisfaction, by salary level (quartiles)",
+                                   filename    = "satisfaction_by_salary.png",
+                                   subtitle    = "Quartiles computed on the midpoint-based full-time-equivalent salary estimate",
+                                   group_order = levels(clean_data$salary_group))
+}
 
 # e) By work rate
 make_satisfaction_by_group_table(clean_data, "workrate_group",
@@ -1474,12 +1490,14 @@ message("✔ 5.3.5 (3) — Work-related skills and statistical activities")
 # ══════════════════════════════════════════════════════════════════
 
 # a) Salary levels
-make_grouped_numeric_table(clean_data, "role_group", "salary",
-                           title    = "Salary levels, hidden vs. labelled statistical roles",
-                           filename = "hidden_salary_by_rolegroup.png",
-                           subtitle = "Full-time equivalent (100% workload), in CHF",
-                           group_order = role_group_levels,
-                           unit        = "CHF")
+if (ANALYZE_SALARY) {
+  make_grouped_numeric_table(clean_data, "role_group", "salary_fte_mid",
+                             title    = "Salary levels, hidden vs. labelled statistical roles",
+                             filename = "hidden_salary_by_rolegroup.png",
+                             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band",
+                             group_order = role_group_levels,
+                             unit        = "CHF")
+}
 
 # b) Years of professional experience
 make_grouped_numeric_table(clean_data, "role_group", "plyexp",

@@ -95,7 +95,7 @@ if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
 message("── Plots : labour_market ──")
 
 sector_counts <- clean_data |> filter(!is.na(plsector)) |> count(plsector)
-sector_eligible <- sector_counts$plsector[sector_counts$n >= 5]
+sector_eligible <- sector_counts$plsector[sector_counts$n >= GROUP_MIN_N]
 df_sector_pool <- clean_data |> filter(plsector %in% sector_eligible)
 
 df_us_overall <- clean_data |>
@@ -131,38 +131,43 @@ df_us_sector <- clean_data |>
   filter(!is.na(importance_code), plsector %in% sector_eligible) |>
   mutate(theme = stringr::str_wrap(theme, width = 28))
 
-save_heatmap_crosstab(df_us_sector, "plsector", "theme",
-                      "Mean perceived importance of statistical activities, by sector",
-                      "labour_activities_by_sector.png",
-                      subtitle = "Scale: 0-4. Sectors with fewer than 5 respondents excluded.",
-                      wrap_width = 30)
+save_heatmap_mean(df_us_sector, "plsector", "theme", "importance_code",
+                  "Mean perceived importance of statistical activities, by sector",
+                  "labour_activities_by_sector.png",
+                  subtitle = paste0("Scale: 0-4. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+                  wrap_width = 30, caption_n = nrow(df_sector_pool),
+                  fill_domain = c(0, 4))
 
 df_skills_sector <- df_sector_pool |>
+  mutate(.respondent_id = row_number()) |>
   tidyr::unnest_longer(skills, values_to = "skill") |>
   filter(!is.na(skill), skill != "")
 
-save_heatmap_crosstab(df_skills_sector, "plsector", "skill",
-                      "Work-related skills — share of respondents, by sector",
-                      "labour_skills_by_sector.png",
-                      subtitle = "Multiple skills allowed per respondent. Sectors with fewer than 5 respondents excluded.",
-                      wrap_width = 30, col_wrap_width = 18)
+save_heatmap_share(df_skills_sector, "plsector", "skill", ".respondent_id",
+                   "Work-related skills — share of respondents, by sector",
+                   "labour_skills_by_sector.png",
+                   subtitle = paste0("Multiple skills allowed per respondent. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+                   wrap_width = 30, col_wrap_width = 18,
+                   caption_n = nrow(df_sector_pool))
 
 save_boxplot(df_sector_pool, "plyexp",
              "Years of professional experience, by sector",
              "labour_experience_by_sector.png",
              groupvar = "plsector",
-             subtitle = "Sorted by median years of experience. Sectors with fewer than 5 respondents excluded.")
+             subtitle = paste0("Sorted by median years of experience. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+             min_n = GROUP_MIN_N)
 
 save_heatmap_crosstab(df_sector_pool, "plsector", "plsenior",
                       "Seniority level, by sector",
                       "labour_seniority_by_sector.png",
-                      subtitle = "Sectors with fewer than 5 respondents excluded.",
+                      subtitle = paste0("Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
                       wrap_width = 30)
 
 save_rate_bar(df_sector_pool, "plsector", "is_manager",
               "Managerial responsibility, by sector",
               "labour_manager_rate_by_sector.png",
-              subtitle = "Share of respondents in a managerial position. Sectors with fewer than 5 respondents excluded.")
+              subtitle = paste0("Share of respondents in a managerial position. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+              min_n = GROUP_MIN_N)
 
 save_bar_freq(clean_data, "continuous_education",
               "Continuous education", "labour_continuing_ed_overall.png",
@@ -193,49 +198,54 @@ plots_dir <- file.path(out_dir, "salary_and_conditions")
 if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
 message("── Plots : salary_and_conditions ──")
 
-dmwork_counts <- clean_data |> filter(!is.na(dmwork), dmwork != "I do not work") |> count(dmwork)
-dmwork_eligible <- dmwork_counts$dmwork[dmwork_counts$n >= 5]
+dmwork_counts <- clean_data |> filter(!is.na(dmwork), dmwork != "I do not work", !is.na(salary_fte_mid)) |> count(dmwork)
+dmwork_eligible <- dmwork_counts$dmwork[dmwork_counts$n >= SALARY_BOXPLOT_MIN_N]
 df_work_pool <- clean_data |> filter(dmwork %in% dmwork_eligible)
 
-save_boxplot(clean_data, "salary",
+if (ANALYZE_SALARY) {
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by sector of employment", "salary_by_sector.png",
-             groupvar = "plsector",
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "plsector", min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by work position (job title)", "salary_by_jobrole.png",
-             groupvar = "job_role",
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "job_role", min_n = SALARY_JOBROLE_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by highest degree obtained", "salary_by_degree.png",
-             groupvar = "trlvl", order_by_median = FALSE,
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "trlvl", order_by_median = FALSE, min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by years of professional experience", "salary_by_experience.png",
-             groupvar = "exp_group", order_by_median = FALSE,
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "exp_group", order_by_median = FALSE, min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by seniority level", "salary_by_seniority.png",
-             groupvar = "plsenior", order_by_median = FALSE,
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "plsenior", order_by_median = FALSE, min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by age group", "salary_by_age_group.png",
-             groupvar = "age_group", order_by_median = FALSE,
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "age_group", order_by_median = FALSE, min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
 
-save_boxplot(df_work_pool, "salary",
-             "Salary levels, by work region (canton)", "salary_by_work_region.png",
-             groupvar = "dmwork",
-             subtitle = "Full-time equivalent (100% workload), in CHF. Regions with fewer than 5 respondents excluded.")
+save_boxplot(df_work_pool, "salary_fte_mid",
+             "Salary levels, by main work canton", "salary_by_work_region.png",
+             groupvar = "dmwork", min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = paste0("Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band. ",
+                               "Work location is based on 'Where do you (mainly) work?'. Cantons with fewer than ",
+                               SALARY_BOXPLOT_MIN_N, " usable salary observations are not shown."))
 
-save_boxplot(clean_data, "salary",
+save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by gender", "salary_by_gender.png",
-             groupvar = "dmgender",
-             subtitle = "Full-time equivalent (100% workload), in CHF")
+             groupvar = "dmgender", min_n = SALARY_BOXPLOT_MIN_N,
+             subtitle = "Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band")
+
+}
 
 save_diverging_satisfaction(clean_data, "plsector",
                             "Job satisfaction, by sector of employment",
@@ -251,16 +261,22 @@ save_diverging_satisfaction(clean_data, "plsenior",
                             "satisfaction_by_seniority.png",
                             group_order = seniority_level_levels)
 
-clean_data$salary_quartile <- cut(clean_data$salary,
-                                  breaks = quantile(clean_data$salary, probs = seq(0, 1, 0.25), na.rm = TRUE),
-                                  labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"),
-                                  include.lowest = TRUE)
+if (ANALYZE_SALARY) {
+clean_data$salary_quartile <- factor(
+  dplyr::case_when(
+    is.na(clean_data$salary_fte_mid) ~ NA_character_,
+    TRUE ~ c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)")[dplyr::ntile(clean_data$salary_fte_mid, 4)]
+  ),
+  levels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)")
+)
 
 save_diverging_satisfaction(clean_data, "salary_quartile",
                             "Job satisfaction, by salary level (quartiles)",
                             "satisfaction_by_salary.png",
-                            subtitle = "Quartiles computed on full-time equivalent salary",
+                            subtitle = "Quartiles computed on the midpoint-based full-time-equivalent salary estimate",
                             group_order = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"))
+
+}
 
 clean_data$workrate_group <- cut(clean_data$plrate,
                                  breaks = c(0, 50, 80, 100),
@@ -364,32 +380,48 @@ plots_dir <- file.path(out_dir, "hidden_statistical_roles")
 if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
 message("── Plots : hidden_statistical_roles ──")
 
-# Heuristique simple pour rolegroup — À ALIGNER avec la règle exacte
-# utilisée dans 07_tables_derived_variables.R si elle diffère.
-clean_data$rolegroup <- ifelse(
-  grepl("stat|data", clean_data$job_role, ignore.case = TRUE),
-  "Explicit statistical/data role", "Hidden statistical role"
-)
+# Reuse the operational role-group definition created in
+# 07_tables_derived_variables.R. This keeps plots and tables aligned:
+# only employed respondents with high statistical activity are classified as
+# Hidden vs Labelled statistical roles.
+role_plot_data <- clean_data |>
+  filter(!is.na(role_group)) |>
+  mutate(
+    rolegroup = factor(
+      as.character(role_group),
+      levels = c("Labelled statistical role", "Hidden statistical role"),
+      labels = c("Explicit statistical/data role", "Hidden statistical role")
+    ),
+    .respondent_id = row_number()
+  )
 
-df_skills_role <- clean_data |>
+# Skills: proportions are preferable to raw counts because the two role groups
+# have different sample sizes.
+df_skills_role <- role_plot_data |>
   tidyr::unnest_longer(skills, values_to = "skill") |>
   filter(!is.na(skill), skill != "")
 
-save_heatmap_crosstab(df_skills_role, "skill", "rolegroup",
-                      "Work-related skills, by role group",
-                      "hidden_skills_by_rolegroup.png",
-                      subtitle = "Explicit statistical/data job titles vs. hidden statistical roles",
-                      wrap_width = 28)
+save_heatmap_share(df_skills_role, "skill", "rolegroup", ".respondent_id",
+                   "Work-related skills, by role group",
+                   "hidden_skills_by_rolegroup.png",
+                   subtitle = "Share of respondents within each role group",
+                   wrap_width = 34,
+                   caption_n = nrow(role_plot_data),
+                   denominator = "col")
 
-df_us_role <- clean_data |>
+# Activities: show the statistic advertised by the title — mean importance
+# on the 0-4 scale — rather than repeated row counts.
+df_us_role <- role_plot_data |>
   tidyr::unnest(ustime) |>
-  filter(!is.na(importance_code)) |>
-  mutate(theme = stringr::str_wrap(theme, width = 28))
+  filter(!is.na(importance_code))
 
-save_heatmap_crosstab(df_us_role, "theme", "rolegroup",
-                      "Statistical activities, by role group",
-                      "hidden_activities_by_rolegroup.png",
-                      subtitle = "Mean perceived importance — explicit vs. hidden statistical roles")
+save_heatmap_mean(df_us_role, "theme", "rolegroup", "importance_code",
+                  "Statistical activities, by role group",
+                  "hidden_activities_by_rolegroup.png",
+                  subtitle = "Mean perceived importance — scale 0-4",
+                  wrap_width = 34,
+                  caption_n = nrow(role_plot_data),
+                  fill_domain = c(0, 4))
 
 message("  ✔ hidden_statistical_roles")
 message("✔ 05_plots_advanced.R terminé — plots dans ", out_dir, "\n")

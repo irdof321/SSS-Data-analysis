@@ -32,7 +32,19 @@ to_int01 <- function(x) {
 ####################################################################
 #  Import
 ####################################################################
-raw_data   <- read.csv(data_file, header = TRUE, sep = ";")
+raw_data <- read.csv(
+  data_file,
+  header = TRUE,
+  sep = ";",
+  stringsAsFactors = FALSE,
+  check.names = TRUE
+)
+
+# Current LimeSurvey answer-code exports are harmonised here so that the
+# rest of the cleaning pipeline can keep using the conventions of the
+# simulated sample.
+raw_data <- prepare_limesurvey_data(raw_data)
+
 clean_data <- raw_data[, 0, drop = FALSE]
 
 ####################################################################
@@ -53,7 +65,9 @@ clean_data$age     <- ifelse(is.na(clean_data$dmbirth), NA_integer_,
 ####################################################################
 #  Logicals
 ####################################################################
-clean_data$sssknow <- as.logical(raw_data$sssknow)
+clean_data$sssknow <- suppressWarnings(
+  as.integer(as.character(raw_data$sssknow))
+) == 1L
 
 ####################################################################
 #  Factors — démographie
@@ -108,8 +122,12 @@ training_fields_bitmap <- as.matrix(
 )
 storage.mode(training_fields_bitmap) <- "integer"
 
-other_col  <- "trarea.other"
-other_text <- trimws(as.character(raw_data[[other_col]]))
+other_col <- intersect(c("trarea.other.", "trarea.other"), names(raw_data))
+other_text <- if (length(other_col) > 0) {
+  trimws(as.character(raw_data[[other_col[1]]]))
+} else {
+  rep(NA_character_, nrow(raw_data))
+}
 other_text[is.na(other_text) | other_text == ""] <- NA_character_
 
 clean_data$training_fields_list <- lapply(
@@ -125,7 +143,7 @@ clean_data$training_fields_list <- lapply(
 ####################################################################
 #  Factors — formation continue
 ####################################################################
-cont_cols   <- paste0("trcont.", 1:6, ".")
+cont_cols   <- paste0("trcont.", 1:7, ".")
 cont_bitmap <- as.matrix(
   data.frame(lapply(raw_data[, cont_cols, drop = FALSE], to_int01))
 )
@@ -139,17 +157,24 @@ clean_data$continuous_education <- apply(cont_bitmap, 1, function(r) {
   if (length(idx) == 1) continuous_education_levels[idx] else NA_character_
 })
 
-clean_data$trcont2 <- rowSums(cont_bitmap[, 2:6, drop = FALSE]) > 0L
+clean_data$trcont2 <- rowSums(cont_bitmap[, 2:7, drop = FALSE]) > 0L
 
 ####################################################################
 #  Emploi
 ####################################################################
-clean_data$employed <- as.logical(raw_data$plemployed)
+clean_data$employed <- suppressWarnings(
+  as.integer(as.character(raw_data$plemployed))
+) == 1L
 
-clean_data$job_status <- ifelse(
-  raw_data$plemployed == 1,
-  "Employed",
-  employment_status_level[raw_data$plstatus - 1]
+status_code <- suppressWarnings(as.integer(as.character(raw_data$plstatus)))
+clean_data$job_status <- case_when(
+  clean_data$employed ~ "Employed",
+  status_code == 2L   ~ "Self-employed",
+  status_code == 3L   ~ "Student",
+  status_code == 4L   ~ "Unemployed",
+  status_code == 5L   ~ "Retired",
+  as.character(raw_data$plstatus) == "-oth-" ~ "Other",
+  TRUE ~ NA_character_
 )
 
 raw_data$plrole  <- as.character(raw_data$plrole)
@@ -227,12 +252,57 @@ clean_data$ustime <- ustime_list
 ####################################################################
 #  Salaire
 ####################################################################
-x <- as.character(raw_data$issalary)
-x <- gsub("'", "", x)
-x <- gsub(" ", "", x)
-x <- gsub(",", ".", x)
-clean_data$salary <- suppressWarnings(as.numeric(x)) /
-  clean_data$plrate * 100
+# The current questionnaire stores salary as ordered bands (AO01-AO16).
+# Keep the observed band as the primary variable, and derive a midpoint-based
+# numeric approximation for descriptive summaries and FTE comparisons.
+salary_code <- as.character(raw_data$issalary)
+
+clean_data$salary_band <- factor(
+  unname(salary_band_labels[salary_code]),
+  levels = salary_band_labels,
+  ordered = TRUE
+)
+
+# Salary interval as declared in the questionnaire.
+# Bounds that are not known because the class is open-ended remain NA.
+clean_data$salary_band_low  <- unname(salary_band_lower[salary_code])
+clean_data$salary_midpoint  <- unname(salary_band_midpoints[salary_code])
+clean_data$salary_band_high <- unname(salary_band_upper[salary_code])
+
+# Backward-compatible alias used by the basic gross-salary summary.
+# This is NOT an exact observed salary: it is the midpoint estimate of the
+# respondent's declared salary band.
+clean_data$salary_raw <- clean_data$salary_midpoint
+
+# Convert the whole salary interval to a 100% full-time-equivalent (FTE).
+# Example: declared 80-89,999 CHF at 50% -> approximately 160-180k CHF FTE.
+# Open-ended bounds stay NA, while the midpoint estimate is still available.
+valid_rate <- !is.na(clean_data$plrate) & clean_data$plrate > 0
+
+clean_data$salary_fte_low <- ifelse(
+  valid_rate & !is.na(clean_data$salary_band_low),
+  clean_data$salary_band_low / clean_data$plrate * 100,
+  NA_real_
+)
+
+clean_data$salary_fte_mid <- ifelse(
+  valid_rate & !is.na(clean_data$salary_midpoint),
+  clean_data$salary_midpoint / clean_data$plrate * 100,
+  NA_real_
+)
+
+clean_data$salary_fte_high <- ifelse(
+  valid_rate & !is.na(clean_data$salary_band_high),
+  clean_data$salary_band_high / clean_data$plrate * 100,
+  NA_real_
+)
+
+# Backward-compatible alias: all existing salary plots/tables now use the
+# midpoint-based FTE estimate without requiring changes elsewhere.
+clean_data$salary <- clean_data$salary_fte_mid
+
+# Alias retained for traceability of the original LimeSurvey answer code.
+clean_data$salary_category <- salary_code
 
 ####################################################################
 #  Satisfaction au travail — globale
@@ -273,14 +343,9 @@ clean_data$issatisf2 <- lapply(seq_len(nrow(issatisf_mat)), function(i) {
 #  Variables dérivées (protocole 5.2)
 ####################################################################
 
-### Salaire BRUT (variable de base, avant normalisation)
-# NOTE: la variable `salary` existante est déjà la dérivée normalisée 100%.
-# On garde ici le salaire brut tel que déclaré.
-x_raw <- as.character(raw_data$issalary)
-x_raw <- gsub("'", "", x_raw)
-x_raw <- gsub(" ", "", x_raw)
-x_raw <- gsub(",", ".", x_raw)
-clean_data$salary_raw <- suppressWarnings(as.numeric(x_raw))
+### Salaire BRUT approximé (avant normalisation FTE)
+# `salary_raw` is already created above from the salary-band midpoint.
+# `salary` is the corresponding approximate full-time-equivalent value.
 
 ### Career stage (protocole 5.2.2.2)
 # Regroupement des années d'expérience en stades de carrière.

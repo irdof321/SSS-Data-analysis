@@ -1,6 +1,6 @@
-Age group,No,"MAS, DAS, CAS","Certified online training (Coursera, Edx, etc.)","Postgraduate in Business/Finance (MBA, EMBA, etc.)",Post-Doc,Further training with an employer,Total,::rowname::
-< 30,22,2,6,4,3,4,41,
-30-39,36,3,6,5,2,4,56,
-40-49,31,3,3,2,2,1,42,
-50-59,43,8,2,6,4,6,69,
-60+,37,6,3,7,6,5,64,
+Age group,No,"MAS, DAS, CAS","Certified online training (Coursera, Edx, etc.)",Post-Doc,Further training with an employer,Other,Total,::rowname::
+< 30,10,0,0,0,0,1,11,
+30-39,26,4,1,9,3,0,43,
+40-49,12,8,1,5,1,2,29,
+50-59,9,4,0,2,5,2,22,
+60+,6,0,0,0,3,1,10,

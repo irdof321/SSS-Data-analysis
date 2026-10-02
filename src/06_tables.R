@@ -421,10 +421,36 @@ generate_all_tables <- function(df, subdir, pop_label) {
   #     (protocole, section 5.1 — point 6)
   # ════════════════════════════════════════════════════════════════
   
-  make_numeric_table(df, "salary_raw",
-                     "Gross annual income — descriptive statistics",
-                     "desc_salary_raw.png",
-                     unit = "CHF")
+  if (ANALYZE_SALARY) {
+    make_freq_table(
+      df, "salary_band",
+      "Gross annual salary — distribution by salary band",
+      "freq_salary_band.png",
+      subtitle = "Observed questionnaire categories",
+      order_by = "level"
+    )
+
+    # Numeric summary is always normalized to a 100% workload.
+    st_sal <- salary_fte_stats(df)
+    tab_sal <- data.frame(
+      N = st_sal$n,
+      `Approx. mean FTE` = st_sal$mean,
+      `Approx. median FTE` = st_sal$median,
+      check.names = FALSE
+    )
+    gt_sal <- tab_sal |>
+      gt() |>
+      fmt_integer(columns = N) |>
+      fmt_currency(columns = c(`Approx. mean FTE`, `Approx. median FTE`), currency = "CHF", decimals = 0) |>
+      style_table(
+        title = "Salary — approximate full-time-equivalent summary",
+        subtitle = paste0(
+          "100% FTE estimate = declared salary-band midpoint / reported work rate × 100. ",
+          "The original band limits are retained in salary_fte_low/high; open-ended limits remain unknown."
+        )
+      )
+    save_gt(gt_sal, "desc_salary_fte.png")
+  }
   
   make_freq_table(df, "worksatisfction",
                   "Overall work satisfaction",

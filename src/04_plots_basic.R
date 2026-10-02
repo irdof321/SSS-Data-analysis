@@ -157,9 +157,25 @@ generate_all_plots <- function(df, subdir, pop_label) {
   # ══════════════════════════════════════════════════════════════
   #  6. INCOME AND JOB SATISFACTION
   # ══════════════════════════════════════════════════════════════
-  save_hist(df, "salary_raw",
-            "Gross annual income — descriptive statistics", "desc_salary_raw.png",
-            bins = 25, pop_label = pop_label)
+  if (ANALYZE_SALARY) {
+    # 1) What was actually observed in the questionnaire
+    save_salary_band_distribution(
+      df,
+      "Gross annual salary — declared salary bands",
+      "freq_salary_band.png",
+      subtitle = "Observed questionnaire categories; not adjusted for work rate",
+      pop_label = pop_label
+    )
+
+    # 2) Approximate continuous salary normalized to a 100% workload
+    save_salary_fte_distribution(
+      df,
+      "Approximate full-time-equivalent salary",
+      "desc_salary_fte.png",
+      subtitle = "Each respondent's salary-band midpoint is normalized using their reported work rate",
+      pop_label = pop_label
+    )
+  }
   
   save_bar_freq(df, "worksatisfction",
                 "Overall work satisfaction", "freq_work_satisfaction.png",

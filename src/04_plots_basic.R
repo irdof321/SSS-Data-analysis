@@ -5,7 +5,10 @@
 #  Un graphe par table de 06_tables.R, même nom de fichier, même titre.
 # ══════════════════════════════════════════════════════════════════
 
-generate_all_plots <- function(df, subdir, pop_label) {
+# status_df: same population BEFORE the eligibility exclusions — used only for
+# employment status and place of work (see 02_cleaning.R, `status_data`).
+generate_all_plots <- function(df, subdir, pop_label, status_df = df) {
+  status_label <- paste0(pop_label, ", before eligibility exclusions")
   
   plots_dir <<- file.path(out_dir, subdir)
   if (!dir.exists(plots_dir)) dir.create(plots_dir, recursive = TRUE)
@@ -31,9 +34,9 @@ generate_all_plots <- function(df, subdir, pop_label) {
                 "Place of residence (canton)", "freq_residency.png",
                 order = "freq", horizontal = TRUE, pop_label = pop_label)
   
-  save_bar_freq(df, "dmwork",
+  save_bar_freq(status_df, "dmwork",
                 "Place of work (canton)", "freq_work_location.png",
-                order = "freq", horizontal = TRUE, pop_label = pop_label)
+                order = "freq", horizontal = TRUE, pop_label = status_label)
   
   message("  ✔ Bloc 1 — Demographics")
   
@@ -90,16 +93,16 @@ generate_all_plots <- function(df, subdir, pop_label) {
   #  4. PROFESSIONAL LIFE
   # ══════════════════════════════════════════════════════════════
   # Drawn only if the variable still varies (a single bar would be meaningless).
-  if (length(unique(stats::na.omit(df$job_status))) > 1) {
-    save_bar_freq(df, "job_status",
+  if (length(unique(stats::na.omit(status_df$job_status))) > 1) {
+    save_bar_freq(status_df, "job_status",
                   "Employment status", "freq_employment_status.png",
-                  pop_label = pop_label)
+                  pop_label = status_label)
   }
   
-  if (length(unique(stats::na.omit(df$employed))) > 1) {
-    save_bar_freq(df, "employed",
+  if (length(unique(stats::na.omit(status_df$employed))) > 1) {
+    save_bar_freq(status_df, "employed",
                   "Currently employed", "freq_employed.png",
-                  pop_label = pop_label)
+                  pop_label = status_label)
   }
   
   save_bar_freq(df, "plsector",
@@ -224,8 +227,10 @@ generate_all_plots <- function(df, subdir, pop_label) {
 
 generate_all_plots(clean_data,
                    subdir    = "full_population",
-                   pop_label = "All respondents")
+                   pop_label = "All respondents",
+                   status_df = status_data)
 
 generate_all_plots(clean_data |> filter(is_sss_member),
                    subdir    = "sss_members",
-                   pop_label = "SSS members")
+                   pop_label = "SSS members",
+                   status_df = status_data |> filter(is_sss_member))

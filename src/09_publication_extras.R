@@ -7,7 +7,7 @@
 #                                           (+ Figures sheet with Figures 13-14);
 #                                           falls back to CSV if openxlsx is missing.
 #  Underlying sheets (same names as the former CSV files):
-#    tab_sample_flow.csv                 -> Table 2
+#    tab_sample_flow.csv, table2_sample_flow.png -> Table 2
 #    tab_salary_sector_by_career_stage.csv, tab_salary_degree_by_career_stage.csv -> Table 6
 #    tab_salary_table5_extended.csv      -> Table 5 (management, degree, gender, region)
 #    tab_table5b_region_by_management.csv, tab_salary_region_by_management.csv
@@ -160,9 +160,26 @@ save_pub_table <- function(gt_obj, caption, note, file, center_cols) {
   invisible(gt_obj)
 }
 
+# Table 2 as an image (rows built in 02_cleaning.R)
+if (exists("sample_flow")) {
+  t2 <- sample_flow
+  last <- nrow(t2)
+  t2$Step[last] <- paste0("   ", t2$Step[last])
+  save_pub_table(
+    t2 |>
+      gt::gt() |>
+      gt::tab_style(style = gt::cell_text(weight = "bold"),
+                    locations = gt::cells_body(rows = last - 1)),
+    "**From responses to the analysis sample**",
+    "Source: SSS Work and Salary Survey 2026.",
+    "table2_sample_flow.png",
+    center_cols = "n"
+  )
+}
+
 save_pub_table(
   table6_wide |> gt::gt(rowname_col = "group", groupname_col = "block"),
-  "**Table 6.** *Median FTE gross annual salary (CHF) by sector and degree, within career stages (n in brackets)*",
+  "**Median FTE gross annual salary (CHF) by sector and degree, within career stages (n in brackets)**",
   pub_source_note(sum(!is.na(sal$career_stage)),
                   paste0(" – = fewer than ", PUB_MIN_N, " respondents.")),
   "table6_like_with_like.png",
@@ -346,7 +363,7 @@ save_pub_table(
     gt::gt(rowname_col = "row") |>
     gt::tab_style(style = gt::cell_text(weight = "bold"),
                   locations = list(gt::cells_body(rows = 6), gt::cells_stub(rows = 6))),
-  "**Table 7.** *Women and men compared*",
+  "**Women and men compared**",
   pub_source_note(nrow(gsal), " Difference = (women − men) / men."),
   "table7_women_men.png",
   center_cols = c("Women", "Men", "Difference")

@@ -60,7 +60,7 @@ if (nrow(df_us_profile) > 0) {
   p <- ggplot(tab_imp, aes(x = theme, y = job_profile, fill = mean_imp)) +
     geom_tile(color = sss_bg, linewidth = 1.5) +
     geom_text(aes(label = round(mean_imp, 1),
-                  color = mean_imp > (max(tab_imp$mean_imp) * 0.55)),
+                  color = mean_imp > (max(mean_imp) * 0.55)),
               size = 3.3, fontface = "bold", show.legend = FALSE) +
     scale_color_manual(values = c(`TRUE` = "white", `FALSE` = sss_blue_dark)) +
     scale_fill_gradient(low = "#eaf2fa", high = sss_blue_dark, guide = "none") +
@@ -75,7 +75,7 @@ if (nrow(df_us_profile) > 0) {
 
 # Field of study by gender (multi-select field) -> heatmap
 df_fields_gender <- clean_data |>
-  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  unnest_list_col("training_fields_list", values_to = "field") |>
   filter(!is.na(field), field != "", !is.na(dmgender))
 
 save_heatmap_crosstab(df_fields_gender, "field", "dmgender",
@@ -86,7 +86,7 @@ save_heatmap_crosstab(df_fields_gender, "field", "dmgender",
 
 # Field of study by location of graduation -> heatmap
 df_fields_loc <- clean_data |>
-  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  unnest_list_col("training_fields_list", values_to = "field") |>
   filter(!is.na(field), field != "", !is.na(study_location))
 
 save_heatmap_crosstab(df_fields_loc, "field", "study_location",
@@ -154,7 +154,7 @@ save_heatmap_mean(df_us_sector, "plsector", "theme", "importance_code",
 
 df_skills_sector <- df_sector_pool |>
   mutate(.respondent_id = row_number()) |>
-  tidyr::unnest_longer(skills, values_to = "skill") |>
+  unnest_list_col("skills", values_to = "skill") |>
   filter(!is.na(skill), skill != "")
 
 save_heatmap_share(df_skills_sector, "plsector", "skill", ".respondent_id",
@@ -219,7 +219,7 @@ save_bar_freq(clean_data, "continuous_education",
 save_stacked_100_bar(df_sector_pool, "plsector", "continuous_education",
                      "Continuous education, by sector",
                      "labour_continuing_ed_by_sector.png",
-                     subtitle = "Sectors with fewer than 5 respondents excluded")
+                     subtitle = paste0("Sectors with fewer than ", GROUP_MIN_N, " respondents excluded"))
 
 save_stacked_100_bar(clean_data, "plsenior", "continuous_education",
                      "Continuous education, by seniority level",
@@ -352,9 +352,10 @@ save_bar_freq(clean_data, "workrate_group",
               "Work rate group", "freq_workrate_group.png",
               order = "level")
 
-save_bar_freq(clean_data, "job_status",
+save_bar_freq(status_data, "job_status",
               "Employment status", "freq_employment_status_conditions.png",
-              subtitle = "No fixed-term vs. permanent contract variable is available in the survey")
+              subtitle = "No fixed-term vs. permanent contract variable is available in the survey",
+              pop_label = "All respondents, before eligibility exclusions")
 
 message("  ✔ salary_and_conditions")
 
@@ -370,7 +371,7 @@ save_diverging_satisfaction(clean_data, "job_role",
                             "assoc_satisfaction_by_jobrole.png")
 
 df_skill_sat <- clean_data |>
-  tidyr::unnest_longer(skills, values_to = "skill") |>
+  unnest_list_col("skills", values_to = "skill") |>
   filter(!is.na(skill), skill != "", !is.na(satisf_score))
 
 if (nrow(df_skill_sat) > 0) {
@@ -403,7 +404,7 @@ save_stacked_100_bar(clean_data, "trlvl", "continuous_education",
                      group_order = education_level)
 
 df_field_ce <- clean_data |>
-  tidyr::unnest_longer(training_fields_list, values_to = "field") |>
+  unnest_list_col("training_fields_list", values_to = "field") |>
   filter(!is.na(field), field != "", !is.na(continuous_education))
 
 save_heatmap_crosstab(df_field_ce, "field", "continuous_education",
@@ -415,7 +416,7 @@ save_heatmap_crosstab(df_field_ce, "field", "continuous_education",
 save_stacked_100_bar(df_sector_pool, "plsector", "continuous_education",
                      "Continuous education, by sector of employment",
                      "future_contedu_by_sector.png",
-                     subtitle = "Sectors with fewer than 5 respondents excluded")
+                     subtitle = paste0("Sectors with fewer than ", GROUP_MIN_N, " respondents excluded"))
 
 save_stacked_100_bar(clean_data, "job_profile", "continuous_education",
                      "Continuous education, by activity-based job profile",
@@ -450,7 +451,7 @@ role_plot_data <- clean_data |>
 # Skills: proportions are preferable to raw counts because the two role groups
 # have different sample sizes.
 df_skills_role <- role_plot_data |>
-  tidyr::unnest_longer(skills, values_to = "skill") |>
+  unnest_list_col("skills", values_to = "skill") |>
   filter(!is.na(skill), skill != "")
 
 save_heatmap_share(df_skills_role, "skill", "rolegroup", ".respondent_id",

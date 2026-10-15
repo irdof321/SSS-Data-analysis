@@ -346,6 +346,18 @@ save_boxplot <- function(df, numvar, title, filename,
 #  MULTI-SELECT BAR — variable liste (jamais de donut : les % ne
 #  somment pas à 100%)
 # ══════════════════════════════════════════════════════════════════
+# Base-R equivalent of tidyr::unnest_longer(df, col, values_to = ...):
+# one row per list element, rows with an empty element dropped. Avoids the
+# same tidyr/tidyselect conflict as below ("Predicate must return TRUE or
+# FALSE, not a <Date> object").
+unnest_list_col <- function(df, col, values_to = col) {
+  lst  <- df[[col]]
+  out  <- df[rep(seq_len(nrow(df)), lengths(lst)), , drop = FALSE]
+  out[[col]] <- NULL
+  out[[values_to]] <- unlist(lst, use.names = FALSE)
+  out
+}
+
 save_bar_multi <- function(df, listvar, title, filename,
                            subtitle = NULL, levels_order = NULL,
                            wrap_width = NULL, pop_label = "All respondents") {
@@ -564,7 +576,7 @@ save_rate_bar <- function(df, groupvar, boolvar, title, filename,
 # ══════════════════════════════════════════════════════════════════
 save_diverging_satisfaction <- function(df, groupvar, title, filename,
                                         subtitle = NULL, group_order = NULL,
-                                        min_n = 5, pop_label = "All respondents") {
+                                        min_n = GROUP_MIN_N, pop_label = "All respondents") {
   tab <- df %>%
     filter(!is.na(.data[[groupvar]]), !is.na(worksatisfction)) %>%
     group_by(across(all_of(groupvar))) %>%
@@ -656,7 +668,7 @@ save_facet_topn <- function(df, groupvar, itemvar, n_top, title, filename,
 # ══════════════════════════════════════════════════════════════════
 save_stacked_100_bar <- function(df, groupvar, catvar, title, filename,
                                  subtitle = NULL, group_order = NULL,
-                                 cat_order = NULL, min_n = 5,
+                                 cat_order = NULL, min_n = GROUP_MIN_N,
                                  pop_label = "All respondents") {
   dd <- df %>% filter(!is.na(.data[[groupvar]]), !is.na(.data[[catvar]]))
   if (nrow(dd) == 0) return(invisible(NULL))

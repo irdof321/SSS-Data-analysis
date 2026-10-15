@@ -228,7 +228,18 @@ make_multi_table <- function(df, listvar, title, filename,
 #  GÉNÉRATEUR — toutes les tables (blocs 1 à 6) pour une population
 # ══════════════════════════════════════════════════════════════════
 
-generate_all_tables <- function(df, subdir, pop_label) {
+# status_df: same population BEFORE the eligibility exclusions — used only for
+# employment status and place of work (see 02_cleaning.R, `status_data`).
+generate_all_tables <- function(df, subdir, pop_label, status_df = df) {
+  
+  # Status tables: switch the n / label of the source note to status_df,
+  # then restore the analysis population.
+  status_table <- function(...) {
+    current_pop_n  <<- nrow(status_df)
+    current_pop_lb <<- paste0(pop_label, ", before eligibility exclusions")
+    on.exit({ current_pop_n <<- nrow(df); current_pop_lb <<- pop_label })
+    make_freq_table(status_df, ...)
+  }
   
   # Redirige les sauvegardes + le n affiché vers cette population
   tables_dir     <<- file.path(tab_dir, subdir)
@@ -260,7 +271,7 @@ generate_all_tables <- function(df, subdir, pop_label) {
                   "Place of residence (canton)",
                   "freq_residency.png")
   
-  make_freq_table(df, "dmwork",
+  status_table("dmwork",
                   "Place of work (canton)",
                   "freq_work_location.png")
   
@@ -329,11 +340,11 @@ generate_all_tables <- function(df, subdir, pop_label) {
   #     (protocole, section 5.1 — point 4)
   # ════════════════════════════════════════════════════════════════
   
-  make_freq_table(df, "job_status",
+  status_table("job_status",
                   "Employment status",
                   "freq_employment_status.png")
   
-  make_freq_table(df, "employed",
+  status_table("employed",
                   "Currently employed",
                   "freq_employed.png")
   
@@ -517,14 +528,16 @@ generate_all_tables <- function(df, subdir, pop_label) {
 # 1) Population complète
 generate_all_tables(clean_data,
                     subdir    = "full_population",
-                    pop_label = "All respondents")
+                    pop_label = "All respondents",
+                    status_df = status_data)
 
 # 2) Membres SSS uniquement (is_sss_member == TRUE)
 sss_data <- clean_data |> filter(is_sss_member)
 
 generate_all_tables(sss_data,
                     subdir    = "sss_members",
-                    pop_label = "SSS members only")
+                    pop_label = "SSS members only",
+                    status_df = status_data |> filter(is_sss_member))
 
 message("✔ 06_tables.R terminé — tables dans ", tab_dir,
         " (sous-dossiers full_population/ et sss_members/)")

@@ -447,29 +447,42 @@ clean_data$is_sss_member <- !is.na(clean_data$sssmember) &
 #     statistics programme, criterion c, cannot be identified from the data and
 #     would have to be re-included by hand);
 #   - missing status -> none of the criteria can be established -> excluded.
-# Work outside Switzerland is NOT an exclusion criterion by itself (criterion b).
-is_student    <- clean_data$job_status %in% "Student"
-status_missing <- is.na(clean_data$job_status)
-eligible <- !is_student & !status_missing
+#
+# Publication rule (draft \u00a72.2, decided by the authors): the analysis sample
+# is restricted to people who currently hold a job (employed or self-employed)
+# in Switzerland. Retired, unemployed, full-time students and other
+# non-working statuses are excluded, as are respondents who do not work or
+# work outside Switzerland. The complete questionnaires BEFORE these
+# exclusions are kept in `status_data`, used only for the outputs that
+# describe employment status and place of work (who works, who is retired\u2026).
+status_data <- clean_data
 
-# Sample flow (Table 2 of the publication; written by 09_publication_extras.R)
+has_job  <- clean_data$job_status %in% c("Employed", "Self-employed")
+works_ch <- !(as.character(clean_data$dmwork) %in% c("I do not work", "Not in Switzerland"))
+eligible <- has_job & works_ch
+
+# Sample flow (Table 2 of the publication; written by 09_publication_extras.R).
+# Rows follow Table 2 of the draft; the "starting sample" row only appears
+# when it differs from the number of complete questionnaires.
 sample_flow <- data.frame(
   Step = c("Participants who started the questionnaire",
            "Questionnaires with all fields answered",
            "Complete questionnaires used as the starting sample",
-           "\u2013 full-time students not employed in a statistics-related position",
-           "\u2013 none of the inclusion criteria met (employment status missing)",
+           "\u2013 retired / unemployed / full-time students (or other / missing status)",
+           "\u2013 not working, or working outside Switzerland",
            "Eligible respondents (analysis sample)",
            "of which with a salary and a work rate of at least 50%"),
   n = c(N_STARTED,
         N_COMPLETE,
         nrow(clean_data),
-        sum(is_student),
-        sum(status_missing & !is_student),
+        sum(!has_job),
+        sum(has_job & !works_ch),
         sum(eligible),
         sum(eligible & !is.na(clean_data$salary_fte_mid))),
   stringsAsFactors = FALSE
 )
+if (nrow(clean_data) == N_COMPLETE) sample_flow <- sample_flow[-3, ]
+rownames(sample_flow) <- NULL
 message("✔ Éligibilité (protocole) : ", sum(eligible), " / ", nrow(clean_data),
         " répondants retenus (", sum(!eligible), " exclus)")
 if (nrow(clean_data) > 20 && sum(eligible) < 0.5 * nrow(clean_data)) {

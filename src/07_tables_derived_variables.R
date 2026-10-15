@@ -1107,10 +1107,14 @@ make_freq_table(clean_data, "workrate_group",
                 order_by = "level")
 
 # c) Employment / contractual status (closest available proxy)
-make_freq_table(clean_data, "job_status",
+current_pop_n  <<- nrow(status_data)
+current_pop_lb <<- "All respondents, before eligibility exclusions"
+make_freq_table(status_data, "job_status",
                 "Employment status",
                 "conditions_employment_status.png",
                 subtitle = "No fixed-term vs. permanent contract variable is available in the survey — this table reports employment status only (employed / self-employed / student / unemployed / retired)")
+current_pop_n  <<- nrow(clean_data)
+current_pop_lb <<- "All respondents"
 
 message("✔ 5.3.3 (3) — Employment conditions")
 

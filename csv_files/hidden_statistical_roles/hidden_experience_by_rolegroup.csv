@@ -1,3 +1,3 @@
-role_group,N,Mean,SD,Median
-Hidden statistical role,29,11.068965517241379,7.333538584976552,9
-Labelled statistical role,103,13.951456310679612,10.311214759627061,12
+role_group,N,Q1,Median,Q3
+Hidden statistical role,29,5.0,9.0,15.0
+Labelled statistical role,107,4.0,12.0,21.0

@@ -84,6 +84,23 @@ save_plot <- function(p, filename, width = 10, height = 6, dpi = 300) {
          dpi = dpi, bg = sss_bg)
 }
 
+# ══════════════════════════════════════════════════════════════════
+#  NOTE D'EXCLUSION — ne renvoie une phrase QUE si des groupes ont
+#  réellement été retirés. Évite d'afficher "groups with n < 10 are
+#  not shown" sur un graphe où rien n'a été exclu.
+# ══════════════════════════════════════════════════════════════════
+min_n_note <- function(df, groupvar, min_n, unit = "Groups") {
+  if (is.null(groupvar) || is.null(min_n) || min_n <= 1) return(NULL)
+  g <- as.character(df[[groupvar]])
+  g <- g[!is.na(g) & g != ""]
+  if (length(g) == 0) return(NULL)
+  cnt <- table(g)
+  dropped <- cnt[cnt < min_n]
+  if (length(dropped) == 0) return(NULL)
+  paste0(unit, " with fewer than ", min_n, " respondents are not shown (",
+         length(dropped), " ", tolower(unit), ", ", sum(dropped), " respondent(s)).")
+}
+
 sss_caption_note <- function(n, pop_label = "All respondents") {
   paste0("SSS Survey — ", pop_label, " — n = ", n)
 }
@@ -111,11 +128,11 @@ save_bar_freq <- function(df, xvar, title, filename,
   tab <- dd %>% count(.cat, name = "n")
   
   if (!is.null(top_n) && nrow(tab) > top_n) {
-    tab <- tab %>%
-      arrange(desc(n)) %>%
-      mutate(rank = row_number(),
-             .cat = ifelse(rank <= top_n, .cat, "Other")) %>%
-      count(.cat, wt = n, name = "n")
+    # Base-R version (avoids tidy-evaluation / dplyr-version issues)
+    tab <- tab[order(-tab$n), , drop = FALSE]
+    tab$.cat <- ifelse(seq_len(nrow(tab)) <= top_n, tab$.cat, "Other")
+    tab <- stats::aggregate(n ~ .cat, data = tab, FUN = sum)
+    tab <- tibble::as_tibble(tab)
   }
   
   tab <- tab %>% mutate(pct = n / sum(n))
@@ -216,6 +233,9 @@ save_boxplot <- function(df, numvar, title, filename,
     grp_chr <- as.character(dd[[groupvar]])
     grp_counts <- table(grp_chr)
     keep_levels <- names(grp_counts)[grp_counts >= min_n]
+    dropped_counts <- grp_counts[grp_counts < min_n]
+    n_grp_dropped <- length(dropped_counts)
+    n_obs_dropped <- sum(dropped_counts)
     dd <- dd[grp_chr %in% keep_levels, , drop = FALSE]
     if (nrow(dd) == 0) return(invisible(NULL))
 
@@ -247,6 +267,8 @@ save_boxplot <- function(df, numvar, title, filename,
 
   # Axis zoom is calculated AFTER small groups have been removed, so excluded
   # groups cannot determine the plotting range.
+  if (is.null(groupvar)) { n_grp_dropped <- 0L; n_obs_dropped <- 0L }
+
   x_max <- max(dd[[numvar]], na.rm = TRUE)
   x_upper <- x_max
   n_hidden <- 0
@@ -274,9 +296,13 @@ save_boxplot <- function(df, numvar, title, filename,
     ))
 
     key_note <- if (show_key)
-      "Boxplot key: red diamond = mean; centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
+      "Boxplot key: centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
     else NULL
-    min_note <- if (min_n > 1) paste0("Groups with n < ", min_n, " are not shown.") else NULL
+    # Shown only when groups were actually removed.
+    min_note <- if (n_grp_dropped > 0)
+      paste0("Groups with n < ", min_n, " are not shown (", n_grp_dropped,
+             " group(s), ", n_obs_dropped, " respondent(s)).")
+    else NULL
     caption_parts <- c(sss_caption_note(nrow(dd), pop_label), min_note, key_note)
     caption_parts <- caption_parts[!is.na(caption_parts) & caption_parts != ""]
     full_caption <- stringr::str_wrap(paste(caption_parts, collapse = "  |  "), width = 125)
@@ -284,7 +310,6 @@ save_boxplot <- function(df, numvar, title, filename,
     p <- ggplot(dd, aes(x = .grp, y = .data[[numvar]])) +
       geom_boxplot(fill = sss_blue, alpha = 0.55, outlier.alpha = 0.35,
                    width = 0.55, color = sss_blue_dark, linewidth = 0.4) +
-      stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "#d62728") +
       coord_flip(ylim = c(NA, x_upper)) +
       labs(title = sss_wrap_title(title), subtitle = full_subtitle,
            caption = full_caption) +
@@ -300,7 +325,7 @@ save_boxplot <- function(df, numvar, title, filename,
     ), width_in = 4)
 
     key_note <- if (show_key)
-      "Boxplot key: red diamond = mean; centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
+      "Boxplot key: centre line = median; box = Q1–Q3 (IQR); whiskers = values within 1.5×IQR; circles = outliers."
     else NULL
     caption_parts <- c(sss_caption_note(nrow(dd), pop_label), key_note)
     full_caption <- stringr::str_wrap(paste(caption_parts, collapse = "  |  "), width = 70)
@@ -308,7 +333,6 @@ save_boxplot <- function(df, numvar, title, filename,
     p <- ggplot(dd, aes(x = "", y = .data[[numvar]])) +
       geom_boxplot(fill = sss_blue, alpha = 0.55, outlier.alpha = 0.35,
                    width = 0.35, color = sss_blue_dark, linewidth = 0.4) +
-      stat_summary(fun = mean, geom = "point", shape = 18, size = 3, color = "#d62728") +
       coord_cartesian(ylim = c(NA, x_upper)) +
       labs(title = sss_wrap_title(title, width_in = 4), subtitle = full_subtitle,
            caption = full_caption) +
@@ -506,7 +530,8 @@ save_rate_bar <- function(df, groupvar, boolvar, title, filename,
   
   tab <- df %>%
     filter(!is.na(.data[[groupvar]])) %>%
-    summarise(N = n(), rate = mean(.data[[boolvar]], na.rm = TRUE), .by = all_of(groupvar)) %>%
+    group_by(across(all_of(groupvar))) %>%
+    summarise(N = n(), rate = mean(.data[[boolvar]], na.rm = TRUE), .groups = "drop") %>%
     filter(N >= min_n)
   names(tab)[1] <- ".grp"
   if (nrow(tab) == 0) return(invisible(NULL))
@@ -542,11 +567,12 @@ save_diverging_satisfaction <- function(df, groupvar, title, filename,
                                         min_n = 5, pop_label = "All respondents") {
   tab <- df %>%
     filter(!is.na(.data[[groupvar]]), !is.na(worksatisfction)) %>%
+    group_by(across(all_of(groupvar))) %>%
     summarise(
       N              = n(),
       pct_satisfied  = mean(worksatisfction %in% c("Very satisfied", "Quite satisfied"), na.rm = TRUE),
       pct_dissatisfied = -mean(worksatisfction %in% c("Not quite satisfied", "Not at all satisfied"), na.rm = TRUE),
-      .by = all_of(groupvar)
+      .groups = "drop"
     ) %>%
     filter(N >= min_n)
   names(tab)[1] <- ".grp"
@@ -638,7 +664,7 @@ save_stacked_100_bar <- function(df, groupvar, catvar, title, filename,
   tab <- dd %>% count(.data[[groupvar]], .data[[catvar]], name = "n")
   names(tab)[1:2] <- c(".grp", ".cat")
   
-  grp_n <- tab %>% summarise(N = sum(n), .by = .grp)
+  grp_n <- tab %>% group_by(.grp) %>% summarise(N = sum(n), .groups = "drop")
   tab <- tab %>% left_join(grp_n, by = ".grp") %>% filter(N >= min_n) %>%
     mutate(pct = n / N)
   
@@ -685,16 +711,25 @@ save_stacked_100_bar <- function(df, groupvar, catvar, title, filename,
 # `salary_fte_high` retain the transformed interval whenever the original
 # band bound is known.
 
+# Salary label: the open-ended top band is approximated by 205 000 (midpoint
+# assumption); any value equal to it must be reported as ">= 200 000".
+salary_label <- function(x) {
+  ifelse(is.na(x), NA_character_,
+         ifelse(x >= 204999, "\u2265 200 000",
+                format(round(x), big.mark = " ", scientific = FALSE, trim = TRUE)))
+}
+
 salary_fte_stats <- function(df) {
   x <- df$salary_fte_mid
   x <- x[!is.na(x) & is.finite(x)]
   if (length(x) == 0) {
-    return(list(n = 0L, mean = NA_real_, median = NA_real_))
+    return(list(n = 0L, q1 = NA_real_, median = NA_real_, q3 = NA_real_))
   }
   list(
     n = length(x),
-    mean = mean(x),
-    median = median(x)
+    q1 = unname(quantile(x, 0.25)),
+    median = median(x),
+    q3 = unname(quantile(x, 0.75))
   )
 }
 
@@ -738,8 +773,8 @@ save_salary_fte_distribution <- function(df, title, filename,
   fmt_chf <- function(x) paste0("CHF ", format(round(x), big.mark = "'", scientific = FALSE))
 
   note <- paste0(
-    "Midpoint-based FTE estimate: mean = ", fmt_chf(st$mean),
-    "; median = ", fmt_chf(st$median), "."
+    "Midpoint-based FTE estimate: median = ", salary_label(st$median),
+    " (Q1-Q3: ", salary_label(st$q1), " - ", salary_label(st$q3), ")."
   )
   full_subtitle <- paste0(
     subtitle %||% "",
@@ -750,8 +785,6 @@ save_salary_fte_distribution <- function(df, title, filename,
   p <- ggplot(dd, aes(x = salary_fte_mid)) +
     geom_histogram(binwidth = binwidth, boundary = 0,
                    fill = sss_blue, color = sss_bg, linewidth = 0.4) +
-    geom_vline(xintercept = st$mean, linetype = "dashed", linewidth = 0.8,
-               color = "#d62728") +
     geom_vline(xintercept = st$median, linetype = "dotted", linewidth = 0.9,
                color = sss_blue_dark) +
     labs(
@@ -759,7 +792,7 @@ save_salary_fte_distribution <- function(df, title, filename,
       subtitle = sss_wrap_subtitle(full_subtitle, width_in = 11),
       caption = paste0(
         sss_caption_note(nrow(dd), pop_label),
-        " | Dashed line = approximate mean; dotted line = approximate median. ",
+        " | Dotted line = approximate median. ",
         "FTE = salary-band midpoint / work rate × 100."
       ),
       x = "Approximate full-time-equivalent salary (CHF)", y = "Respondents"

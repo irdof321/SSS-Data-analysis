@@ -26,10 +26,20 @@ save_heatmap_crosstab(clean_data, "plsenior", "trlvl",
                       "career_seniority_by_degree.png",
                       subtitle = "Counts")
 
-save_rate_bar(clean_data, "trlvl", "is_manager",
-              "Managerial responsibility by highest degree obtained",
-              "career_manager_rate_by_degree.png",
-              subtitle = "Share of respondents in a managerial position (lower/middle/top management)")
+save_heatmap_crosstab(clean_data, "plsenior", "career_stage",
+                      "Seniority level, by career stage",
+                      "career_seniority_by_career_stage.png",
+                      subtitle = "Counts — career stage based on years of professional experience")
+
+# Early career at the top of the chart (coord_flip: first level = bottom).
+save_rate_bar(clean_data |> filter(!is.na(is_manager)),
+              "career_stage", "is_manager",
+              "Managerial responsibility, by career stage",
+              "career_manager_rate_by_career_stage.png",
+              subtitle = paste0("Share of respondents in lower, middle or top management, ",
+                                "among respondents with a reported seniority level"),
+              group_order = rev(career_stage_levels),
+              min_n = 1)
 
 save_facet_topn(clean_data, "job_profile", "job_role", n_top = 5,
                 "Most common job titles within each activity-based profile",
@@ -98,6 +108,10 @@ sector_counts <- clean_data |> filter(!is.na(plsector)) |> count(plsector)
 sector_eligible <- sector_counts$plsector[sector_counts$n >= GROUP_MIN_N]
 df_sector_pool <- clean_data |> filter(plsector %in% sector_eligible)
 
+# Exclusion note: empty when no sector was actually dropped.
+sector_excl <- min_n_note(clean_data, "plsector", GROUP_MIN_N, unit = "Sectors")
+with_sector_note <- function(txt) paste(c(txt, sector_excl), collapse = " ")
+
 df_us_overall <- clean_data |>
   tidyr::unnest(ustime) |>
   filter(!is.na(importance_code)) |>
@@ -134,7 +148,7 @@ df_us_sector <- clean_data |>
 save_heatmap_mean(df_us_sector, "plsector", "theme", "importance_code",
                   "Mean perceived importance of statistical activities, by sector",
                   "labour_activities_by_sector.png",
-                  subtitle = paste0("Scale: 0-4. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+                  subtitle = with_sector_note("Scale: 0-4."),
                   wrap_width = 30, caption_n = nrow(df_sector_pool),
                   fill_domain = c(0, 4))
 
@@ -146,7 +160,7 @@ df_skills_sector <- df_sector_pool |>
 save_heatmap_share(df_skills_sector, "plsector", "skill", ".respondent_id",
                    "Work-related skills — share of respondents, by sector",
                    "labour_skills_by_sector.png",
-                   subtitle = paste0("Multiple skills allowed per respondent. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+                   subtitle = with_sector_note("Multiple skills allowed per respondent."),
                    wrap_width = 30, col_wrap_width = 18,
                    caption_n = nrow(df_sector_pool))
 
@@ -154,20 +168,48 @@ save_boxplot(df_sector_pool, "plyexp",
              "Years of professional experience, by sector",
              "labour_experience_by_sector.png",
              groupvar = "plsector",
-             subtitle = paste0("Sorted by median years of experience. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+             subtitle = with_sector_note("Sorted by median years of experience."),
              min_n = GROUP_MIN_N)
 
-save_heatmap_crosstab(df_sector_pool, "plsector", "plsenior",
+# Sectors below the n >= GROUP_MIN_N rule are pooled in an "Other sectors" row
+# (instead of being dropped) so that every respondent appears in the figure.
+other_sector_label <- "Other sectors (each < 10 respondents)"
+df_sector_pooled <- clean_data |>
+  filter(!is.na(plsector)) |>
+  mutate(plsector = factor(
+    ifelse(plsector %in% sector_eligible, as.character(plsector), other_sector_label),
+    levels = c(as.character(sector_eligible), other_sector_label)
+  ))
+
+save_heatmap_crosstab(df_sector_pooled, "plsector", "plsenior",
                       "Seniority level, by sector",
                       "labour_seniority_by_sector.png",
-                      subtitle = paste0("Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
+                      subtitle = if (length(sector_eligible) < nlevels(droplevels(factor(clean_data$plsector))))
+                        paste0("Sectors with fewer than ", GROUP_MIN_N,
+                               " respondents are pooled in 'Other sectors'.") else NULL,
                       wrap_width = 30)
 
-save_rate_bar(df_sector_pool, "plsector", "is_manager",
+# Denominator = respondents with a known working seniority level (is_manager
+# is NA for "Never worked" / "Other" / missing). Small sectors are pooled in
+# "Other sectors", shown at the bottom.
+df_manager_sector <- df_sector_pooled |>
+  filter(!is.na(is_manager), as.character(plsector) != "None")
+manager_rates <- df_manager_sector |>
+  group_by(plsector) |>
+  summarise(rate = mean(is_manager), .groups = "drop") |>
+  arrange(rate)
+manager_order <- c(other_sector_label,
+                   setdiff(as.character(manager_rates$plsector), other_sector_label))
+
+save_rate_bar(df_manager_sector, "plsector", "is_manager",
               "Managerial responsibility, by sector",
               "labour_manager_rate_by_sector.png",
-              subtitle = paste0("Share of respondents in a managerial position. Sectors with fewer than ", GROUP_MIN_N, " respondents excluded."),
-              min_n = GROUP_MIN_N)
+              subtitle = paste0("Share of respondents in lower, middle or top management, ",
+                                "among respondents with a reported seniority level. ",
+                                "Sectors with fewer than ", GROUP_MIN_N,
+                                " respondents are pooled in 'Other sectors'."),
+              group_order = intersect(manager_order, as.character(manager_rates$plsector)),
+              min_n = 1)
 
 save_bar_freq(clean_data, "continuous_education",
               "Continuous education", "labour_continuing_ed_overall.png",
@@ -201,6 +243,15 @@ message("── Plots : salary_and_conditions ──")
 dmwork_counts <- clean_data |> filter(!is.na(dmwork), dmwork != "I do not work", !is.na(salary_fte_mid)) |> count(dmwork)
 dmwork_eligible <- dmwork_counts$dmwork[dmwork_counts$n >= SALARY_BOXPLOT_MIN_N]
 df_work_pool <- clean_data |> filter(dmwork %in% dmwork_eligible)
+
+# Cantons are filtered out BEFORE the boxplot, so the note is built here from
+# the same base; empty when every canton reaches the threshold.
+dmwork_dropped <- dmwork_counts |> filter(n < SALARY_BOXPLOT_MIN_N)
+dmwork_excl_note <- if (nrow(dmwork_dropped) > 0) {
+  paste0("Cantons with fewer than ", SALARY_BOXPLOT_MIN_N,
+         " usable salary observations are not shown (", nrow(dmwork_dropped),
+         " canton(s), ", sum(dmwork_dropped$n), " respondent(s)).")
+} else NULL
 
 if (ANALYZE_SALARY) {
 save_boxplot(clean_data, "salary_fte_mid",
@@ -236,9 +287,10 @@ save_boxplot(clean_data, "salary_fte_mid",
 save_boxplot(df_work_pool, "salary_fte_mid",
              "Salary levels, by main work canton", "salary_by_work_region.png",
              groupvar = "dmwork", min_n = SALARY_BOXPLOT_MIN_N,
-             subtitle = paste0("Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band. ",
-                               "Work location is based on 'Where do you (mainly) work?'. Cantons with fewer than ",
-                               SALARY_BOXPLOT_MIN_N, " usable salary observations are not shown."))
+             subtitle = paste(c("Approximate full-time equivalent (100% workload), in CHF, using the midpoint of each declared salary band.",
+                                "Work location is based on 'Where do you (mainly) work?'.",
+                                dmwork_excl_note),
+                              collapse = " "))
 
 save_boxplot(clean_data, "salary_fte_mid",
              "Salary levels, by gender", "salary_by_gender.png",

@@ -21,10 +21,11 @@ library(webshot2)   # backend utilisé par gt::gtsave() pour exporter en PNG
 #  Parameters
 ####################################################################
 #data_file <- "sample_survey_results.csv"
-data_file <- "results.csv"
+data_file <- "final_results.csv"
 #data_file <- "simulated_sample_survey_results_300.csv"
 
-REMOVE_NOT_SUB <- FALSE   # remove rows without a submitted date
+REMOVE_NOT_SUB <- TRUE    # drop questionnaires that were never submitted
+                          # (partial answers); they are still counted in Table 2
 
 ref_year <- 2026
 
@@ -44,9 +45,19 @@ ANALYZE_SALARY <- TRUE
 # Boxplot display rules. Groups smaller than these thresholds are not shown,
 # because a boxplot is not informative/reliable with very small n.
 # Job titles are often sparse, so a separate threshold can be used there.
-GROUP_MIN_N <- 5            # minimum n for grouped descriptive comparisons
+GROUP_MIN_N <- 10           # minimum n for grouped descriptive comparisons (publication rule: n >= 10)
+# Salary results are restricted to respondents with a work rate of at least 50%:
+# below that, the band -> FTE conversion multiplies the imprecision of the band.
+SALARY_MIN_WORKRATE <- 50
+
+# Table 2 (sample flow) counts. By default they are read from the export itself,
+# which requires exporting "All responses" so that partial questionnaires are
+# included. If you export completed responses only, the started count cannot be
+# known from the file: put the LimeSurvey admin figures here instead.
+N_STARTED_OVERRIDE  <- NA_integer_
+N_COMPLETE_OVERRIDE <- NA_integer_
 SALARY_BOXPLOT_MIN_N <- GROUP_MIN_N
-SALARY_JOBROLE_MIN_N <- 3     # job titles are sparse; separate threshold
+SALARY_JOBROLE_MIN_N <- GROUP_MIN_N  # same n >= 10 rule for job titles
 SALARY_BOXPLOT_SHOW_N <- TRUE
 SALARY_BOXPLOT_SHOW_KEY <- TRUE
 
@@ -126,6 +137,24 @@ plrole_code_map <- c(
 prepare_limesurvey_data <- function(df) {
 
   if (!IS_LIMESURVEY_EXPORT) return(df)
+
+  # --- "Y" / "N" exports --------------------------------------------
+  # LimeSurvey writes yes/no and multiple-choice answers as "Y" / "N" / ""
+  # unless "Convert Y to" / "Convert N to" are ticked in the export dialog.
+  # Both conventions are accepted here, so that an export option cannot
+  # silently empty the multiple-choice variables.
+  for (v in intersect(c("dmswiss", "trcontswiss", "plemployed"), names(df))) {
+    x <- toupper(trimws(as.character(df[[v]])))
+    if (any(x %in% c("Y", "N"))) {
+      df[[v]] <- dplyr::case_when(x == "Y" ~ "1", x == "N" ~ "0", TRUE ~ NA_character_)
+    }
+  }
+  # Multiple-choice bitmaps: "Y" = selected, empty = not selected.
+  bitmap_cols <- grep("^(trarea|trcont|plskill)\\.[0-9]+\\.$", names(df), value = TRUE)
+  for (v in bitmap_cols) {
+    x <- toupper(trimws(as.character(df[[v]])))
+    if (any(x %in% "Y")) df[[v]] <- ifelse(x %in% "Y", "1", "0")
+  }
 
   # --- Gender -------------------------------------------------------
   # Current LimeSurvey: 1=Female, 2=Male, 3=Other, 4=Prefer not to say
@@ -268,8 +297,11 @@ WORD_REPORT_DYNAMIC_TOC <- TRUE
 WORD_REPORT_INCLUDE_APPENDIX_A <- TRUE
 
 # The automatic Word report uses the CSV mirrors to create editable Word tables.
-# Therefore CSV generation is forced on when the Word report is enabled.
-if (isTRUE(GENERATE_WORD_REPORT)) {
+# Therefore CSV generation is forced on when the Word report is enabled:
+# to skip the CSVs, set BOTH generate_csv_files and GENERATE_WORD_REPORT to FALSE.
+if (isTRUE(GENERATE_WORD_REPORT) && !isTRUE(generate_csv_files)) {
+  message("ℹ generate_csv_files = FALSE ignoré : le rapport Word (GENERATE_WORD_REPORT = TRUE) ",
+          "a besoin des CSV. Mettre aussi GENERATE_WORD_REPORT <- FALSE pour ne créer aucun CSV.")
   generate_csv_files <- TRUE
   if (!dir.exists(csv_dir)) dir.create(csv_dir, recursive = TRUE)
 }

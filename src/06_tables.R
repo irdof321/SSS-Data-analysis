@@ -62,7 +62,9 @@ style_table <- function(gt_obj, title, subtitle = NULL) {
 save_gt <- function(gt_obj, filename) {
   path <- file.path(tables_dir, filename)
   gtsave(gt_obj, path)
-  
+  table_count <<- table_count + 1
+  if (!isTRUE(generate_csv_files)) return(invisible(NULL))
+
   # Miroir CSV : même sous-dossier que tables_dir, mais sous csv_dir/
   rel_subdir <- sub(paste0("^", tab_dir, "/?"), "", tables_dir)
   csv_subdir <- if (rel_subdir == "") csv_dir else file.path(csv_dir, rel_subdir)
@@ -71,8 +73,6 @@ save_gt <- function(gt_obj, filename) {
   csv_path <- file.path(csv_subdir, sub("\\.png$", ".csv", filename))
   readr::write_csv(gt_obj[["_data"]], csv_path)
   message("  → ", csv_path)
-  
-  table_count <<- table_count + 1
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -128,7 +128,7 @@ make_freq_table <- function(df, var, title, filename,
 # ══════════════════════════════════════════════════════════════════
 
 make_numeric_table <- function(df, var, title, filename,
-                               subtitle = NULL, unit = "") {
+                               subtitle = NULL, unit = "", show_mean = TRUE) {
   v <- df[[var]]
   v <- v[!is.na(v)]
   
@@ -145,20 +145,26 @@ make_numeric_table <- function(df, var, title, filename,
     check.names = FALSE
   )
   
+  if (!show_mean) tab <- tab[, setdiff(names(tab), c("Mean", "SD")), drop = FALSE]
+  num_cols <- intersect(c("Mean", "SD", "Q1", "Median", "Q3"), names(tab))
+
   gt_obj <- tab |>
     gt() |>
     fmt_integer(columns = N) |>
-    fmt_number(columns = c(Mean, SD, Q1, Median, Q3), decimals = 1) |>
+    fmt_number(columns = all_of(num_cols), decimals = 1) |>
     fmt_number(columns = c(Min, Max), decimals = 0) |>
     tab_spanner(label = "Distribution", columns = c(Min, Q1, Median, Q3, Max)) |>
-    tab_spanner(label = "Central tendency", columns = c(Mean, SD)) |>
     style_table(title = title, subtitle = subtitle)
+  if (show_mean) {
+    gt_obj <- gt_obj |>
+      tab_spanner(label = "Central tendency", columns = c(Mean, SD))
+  }
   
   if (unit != "") {
     gt_obj <- gt_obj |>
       tab_footnote(
         footnote  = paste0("Values expressed in ", unit, "."),
-        locations = cells_column_labels(columns = Mean)
+        locations = cells_column_labels(columns = N)
       )
   }
   
@@ -434,18 +440,18 @@ generate_all_tables <- function(df, subdir, pop_label) {
     st_sal <- salary_fte_stats(df)
     tab_sal <- data.frame(
       N = st_sal$n,
-      `Approx. mean FTE` = st_sal$mean,
-      `Approx. median FTE` = st_sal$median,
+      `Approx. Q1 FTE` = salary_label(st_sal$q1),
+      `Approx. median FTE` = salary_label(st_sal$median),
+      `Approx. Q3 FTE` = salary_label(st_sal$q3),
       check.names = FALSE
     )
     gt_sal <- tab_sal |>
       gt() |>
       fmt_integer(columns = N) |>
-      fmt_currency(columns = c(`Approx. mean FTE`, `Approx. median FTE`), currency = "CHF", decimals = 0) |>
       style_table(
         title = "Salary — approximate full-time-equivalent summary",
         subtitle = paste0(
-          "100% FTE estimate = declared salary-band midpoint / reported work rate × 100. ",
+          "100% FTE estimate = declared salary-band midpoint / reported work rate × 100 (work rate ≥ 50% only). Medians and quartiles only. ",
           "The original band limits are retained in salary_fte_low/high; open-ended limits remain unknown."
         )
       )

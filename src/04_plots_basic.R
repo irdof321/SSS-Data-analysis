@@ -89,13 +89,18 @@ generate_all_plots <- function(df, subdir, pop_label) {
   # ══════════════════════════════════════════════════════════════
   #  4. PROFESSIONAL LIFE
   # ══════════════════════════════════════════════════════════════
-  save_bar_freq(df, "job_status",
-                "Employment status", "freq_employment_status.png",
-                pop_label = pop_label)
+  # Drawn only if the variable still varies (a single bar would be meaningless).
+  if (length(unique(stats::na.omit(df$job_status))) > 1) {
+    save_bar_freq(df, "job_status",
+                  "Employment status", "freq_employment_status.png",
+                  pop_label = pop_label)
+  }
   
-  save_bar_freq(df, "employed",
-                "Currently employed", "freq_employed.png",
-                pop_label = pop_label)
+  if (length(unique(stats::na.omit(df$employed))) > 1) {
+    save_bar_freq(df, "employed",
+                  "Currently employed", "freq_employed.png",
+                  pop_label = pop_label)
+  }
   
   save_bar_freq(df, "plsector",
                 "Job sector", "freq_sector.png",

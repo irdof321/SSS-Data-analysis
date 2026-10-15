@@ -38,8 +38,13 @@ if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
 # ══════════════════════════════════════════════════════════════════
 
 # ── Responsabilité managériale (dérivée de plsenior) ───────────────
-clean_data$is_manager <- clean_data$plsenior %in%
-  c("Lower management", "Middle management", "Top management")
+#    NA quand le niveau est manquant / "Never worked" / "Other" : ces
+#    répondants ne doivent pas gonfler le dénominateur des taux.
+clean_data$is_manager <- ifelse(
+  is.na(clean_data$plsenior) | clean_data$plsenior %in% c("Never worked", "Other"),
+  NA,
+  clean_data$plsenior %in% c("Lower management", "Middle management", "Top management")
+)
 
 # ── Profil d'activité (dérivé de ustime — rules-based, TBD) ───────
 #    Classification heuristique basée sur l'importance perçue des 6
@@ -276,12 +281,26 @@ make_crosstab_table(clean_data, "plsenior", "trlvl",
                     col_order = education_level,
                     sort_rows_by_total = FALSE)
 
-# c) Managerial responsibility rate by highest degree
-make_rate_table(clean_data, "trlvl", "is_manager", "managers",
-                title       = "Managerial responsibility by highest degree obtained",
-                filename    = "career_manager_rate_by_degree.png",
-                subtitle    = "Share of respondents in a managerial position (lower/middle/top management)",
-                group_order = education_level)
+# c) Seniority level by career stage (years of experience) — career paths
+#    (research question 7: no question on previous jobs, so career stage is
+#    the only available proxy).
+make_crosstab_table(clean_data, "plsenior", "career_stage",
+                    title     = "Seniority level, by career stage",
+                    filename  = "career_seniority_by_career_stage.png",
+                    row_label = "Seniority level",
+                    row_order = seniority_level_levels,
+                    col_order = career_stage_levels,
+                    sort_rows_by_total = FALSE,
+                    subtitle  = "Counts — career stage based on years of professional experience")
+
+# d) Managerial responsibility rate by career stage
+make_rate_table(clean_data |> filter(!is.na(is_manager)),
+                "career_stage", "is_manager", "managers",
+                title       = "Managerial responsibility, by career stage",
+                filename    = "career_manager_rate_by_career_stage.png",
+                subtitle    = paste0("Share of respondents in lower, middle or top management, ",
+                                     "among respondents with a reported seniority level"),
+                group_order = career_stage_levels)
 
 message("✔ 5.3.1 (1) — Educational attainment and career position")
 
@@ -453,13 +472,15 @@ sector_counts <- clean_data |>
   count(plsector, name = "N")
 
 sectors_eligible <- sector_counts |> filter(N >= GROUP_MIN_N) |> pull(plsector) |> as.character()
-n_sectors_excluded <- sum(sector_counts$N < 5)
+n_sectors_excluded <- sum(sector_counts$N < GROUP_MIN_N)
 
-sector_note <- paste0(
-  "Sectors with fewer than 5 respondents are excluded (",
+# Empty string when nothing was actually excluded, so the note never
+# appears on a table where every group is shown.
+sector_note <- if (n_sectors_excluded > 0) paste0(
+  "Sectors with fewer than ", GROUP_MIN_N, " respondents are excluded (",
   n_sectors_excluded, " sector(s) excluded, covering ",
-  sum(sector_counts$N[sector_counts$N < 5]), " respondent(s))."
-)
+  sum(sector_counts$N[sector_counts$N < GROUP_MIN_N]), " respondent(s))."
+) else ""
 
 message("✔ Secteurs éligibles (n≥", GROUP_MIN_N, ") : ", length(sectors_eligible), " / ",
         nrow(sector_counts))
@@ -643,19 +664,43 @@ gt_exp_sector <- exp_by_sector |>
 save_gt(gt_exp_sector, "labour_experience_by_sector.png")
 
 # b) Seniority level by sector
-make_crosstab_table(df_sector_pool, "plsector", "plsenior",
+# Sectors below the n >= GROUP_MIN_N rule are pooled in an "Other sectors" row.
+other_sector_label <- "Other sectors (each < 10 respondents)"
+df_sector_pooled <- clean_data |>
+  filter(!is.na(plsector)) |>
+  mutate(plsector = factor(
+    ifelse(plsector %in% sectors_eligible, as.character(plsector), other_sector_label),
+    levels = c(sectors_eligible, other_sector_label)
+  ))
+make_crosstab_table(df_sector_pooled, "plsector", "plsenior",
                     title     = "Seniority level, by sector",
                     filename  = "labour_seniority_by_sector.png",
                     row_label = "Sector",
                     col_order = seniority_level_levels,
-                    subtitle  = sector_note)
+                    subtitle  = if (length(sectors_eligible) < nrow(sector_counts))
+                      paste0("Sectors with fewer than ", GROUP_MIN_N,
+                             " respondents are pooled in 'Other sectors'.") else NULL)
 
 # c) Managerial responsibility rate by sector
-make_rate_table(df_sector_pool, "plsector", "is_manager", "managers",
-                title    = "Managerial responsibility, by sector",
-                filename = "labour_manager_rate_by_sector.png",
-                subtitle = paste0("Share of respondents in a managerial position. ", sector_note),
-                sort_by  = "rate")
+#    Denominator = respondents with a known working seniority level; small
+#    sectors pooled in "Other sectors", listed last.
+df_manager_sector <- df_sector_pooled |>
+  filter(!is.na(is_manager), as.character(plsector) != "None")
+manager_order <- df_manager_sector |>
+  group_by(plsector) |>
+  summarise(rate = mean(is_manager), .groups = "drop") |>
+  arrange(desc(plsector == other_sector_label), rate) |>
+  pull(plsector) |>
+  as.character() |>
+  rev()
+make_rate_table(df_manager_sector, "plsector", "is_manager", "managers",
+                title       = "Managerial responsibility, by sector",
+                filename    = "labour_manager_rate_by_sector.png",
+                subtitle    = paste0("Share of respondents in lower, middle or top management, ",
+                                     "among respondents with a reported seniority level. ",
+                                     "Sectors with fewer than ", GROUP_MIN_N,
+                                     " respondents are pooled in 'Other sectors'."),
+                group_order = manager_order)
 
 message("✔ 5.3.2 (2) — Seniority and experience by sector")
 
@@ -761,12 +806,12 @@ dmwork_counts <- clean_data |>
 dmwork_eligible <- dmwork_counts |> filter(N >= GROUP_MIN_N) |> pull(dmwork) |> as.character()
 n_dmwork_excluded <- sum(dmwork_counts$N < GROUP_MIN_N)
 
-dmwork_note <- paste0(
+dmwork_note <- if (n_dmwork_excluded > 0) paste0(
   "Work regions (canton) with fewer than ", GROUP_MIN_N,
   " respondents are excluded (", n_dmwork_excluded,
   " region(s) below the overall location threshold, covering ",
   sum(dmwork_counts$N[dmwork_counts$N < GROUP_MIN_N]), " respondent(s))."
-)
+) else ""
 
 message("✔ Régions de travail éligibles (n≥", GROUP_MIN_N, ") : ", length(dmwork_eligible), " / ",
         nrow(dmwork_counts))
@@ -787,9 +832,9 @@ make_grouped_numeric_table <- function(df, groupvar, numvar, title, filename,
     group_by(.data[[groupvar]]) |>
     summarise(
       N      = n(),
-      Mean   = mean(.data[[numvar]]),
-      SD     = sd(.data[[numvar]]),
+      Q1     = unname(quantile(.data[[numvar]], 0.25)),
       Median = median(.data[[numvar]]),
+      Q3     = unname(quantile(.data[[numvar]], 0.75)),
       .groups = "drop"
     )
   
@@ -805,7 +850,7 @@ make_grouped_numeric_table <- function(df, groupvar, numvar, title, filename,
       arrange(.ord) |>
       select(-.ord)
   } else if (sort_desc) {
-    tab <- tab |> arrange(desc(Mean))
+    tab <- tab |> arrange(desc(Median))
   }
   
   full_subtitle <- subtitle
@@ -818,20 +863,24 @@ make_grouped_numeric_table <- function(df, groupvar, numvar, title, filename,
     )
   }
   
+  # Top open-ended band (205 000 working value) is reported as ">= 200 000".
+  is_salary <- grepl("^salary", numvar)
+  fmt_stat <- if (is_salary) salary_label else function(x) formatC(x, format = "f", digits = 1)
+  tab <- tab |>
+    mutate(Q1 = fmt_stat(Q1), Median = fmt_stat(Median), Q3 = fmt_stat(Q3))
+  
   gt_obj <- tab |>
     gt() |>
     fmt_integer(columns = N) |>
-    fmt_number(columns = c(Mean, SD, Median), decimals = 1) |>
     cols_align(align = "left", columns = 1) |>
-    cols_align(align = "right", columns = c(N, Mean, SD, Median)) |>
-    data_color(columns = Mean, palette = c("white", sss_blue), alpha = 0.4) |>
+    cols_align(align = "right", columns = c(N, Q1, Median, Q3)) |>
     style_table(title = title, subtitle = full_subtitle)
   
   if (unit != "") {
     gt_obj <- gt_obj |>
       tab_footnote(
         footnote  = paste0("Values expressed in ", unit, "."),
-        locations = cells_column_labels(columns = Mean)
+        locations = cells_column_labels(columns = N)
       )
   }
   

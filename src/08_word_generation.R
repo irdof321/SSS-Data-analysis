@@ -142,6 +142,8 @@ if (!GENERATE_WORD_REPORT) {
     "satisfaction_by_salary" = "Job satisfaction, by salary level",
     "labour_activities_by_sector" = "Mean perceived importance of statistical activities, by sector",
     "labour_manager_rate_by_sector" = "Managerial responsibility, by sector",
+    "career_manager_rate_by_career_stage" = "Managerial responsibility, by career stage",
+    "career_seniority_by_career_stage" = "Seniority level, by career stage",
     "labour_experience_by_sector" = "Years of professional experience, by sector",
     "hidden_skills_by_rolegroup" = "Work-related skills, by role group",
     "hidden_activities_by_rolegroup" = "Statistical activities, by role group"

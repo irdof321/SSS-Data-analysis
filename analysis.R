@@ -11,3 +11,4 @@ source("src/07_tables_derived_variables.R")   # crée is_manager, job_profile, p
 source("src/04_plots_basic.R")                # peut rester ici ou avant, n'en dépend pas
 source("src/05_plots_advanced.R")             # doit venir APRÈS le 07
 source("src/08_word_generation.R")             # génère le rapport Word final
+source("src/09_publication_extras.R")      # valeurs et figures pour la publication (publication_outputs/)

@@ -45,6 +45,32 @@ raw_data <- read.csv(
 # simulated sample.
 raw_data <- prepare_limesurvey_data(raw_data)
 
+# Guard: a wrong export option (full answers instead of answer codes, or Y/N
+# left unconverted) empties the key variables and would silently shrink the
+# analysis sample instead of failing. Stop here with an explicit message.
+.chk_employed <- suppressWarnings(as.integer(as.character(raw_data$plemployed)))
+if (!any(.chk_employed %in% c(0L, 1L))) {
+  stop("plemployed ne contient aucune valeur exploitable. Vérifiez l'export ",
+       "LimeSurvey : 'Export responses as' = Answer codes, ",
+       "'Export questions as' = Question code, séparateur = point-virgule.")
+}
+
+####################################################################
+#  Comptages pour le flux d'échantillon (Tableau 2)
+####################################################################
+# Read from the export itself when it contains all responses; the config
+# overrides take precedence when the export is restricted to completed ones.
+.submitted <- !is.na(raw_data$submitdate) & trimws(as.character(raw_data$submitdate)) != ""
+N_STARTED  <- if (!is.na(N_STARTED_OVERRIDE))  N_STARTED_OVERRIDE  else nrow(raw_data)
+N_COMPLETE <- if (!is.na(N_COMPLETE_OVERRIDE)) N_COMPLETE_OVERRIDE else sum(.submitted)
+
+if (REMOVE_NOT_SUB && any(!.submitted)) {
+  message("\u21b7 ", sum(!.submitted), " questionnaire(s) non soumis retiré(s) ",
+          "(partiels — comptés dans le Tableau 2)")
+  raw_data <- raw_data[.submitted, , drop = FALSE]
+  rownames(raw_data) <- NULL
+}
+
 clean_data <- raw_data[, 0, drop = FALSE]
 
 ####################################################################
@@ -111,8 +137,14 @@ clean_data$trlvl <- factor(
   levels = education_level
 )
 
+# NOTE: unlike `dmnatio` (1 = Europe), the `trreg` answer codes start one
+# position later (observed: code 2 is by far the most frequent among people who
+# studied abroad, as Europe is for nationality). Codes are therefore shifted by
+# one before mapping to `continent_levels`. Check against the LimeSurvey answer
+# list for `trreg` if the questionnaire is modified.
+trreg_shifted <- suppressWarnings(as.integer(as.character(raw_data$trreg))) - 1L
 clean_data$study_location <- origin_from_swiss(
-  raw_data$trcontswiss, raw_data$trreg
+  raw_data$trcontswiss, trreg_shifted
 )
 
 # Domaines de formation (bitmap multi-réponse)
@@ -128,7 +160,7 @@ other_text <- if (length(other_col) > 0) {
 } else {
   rep(NA_character_, nrow(raw_data))
 }
-other_text[is.na(other_text) | other_text == ""] <- NA_character_
+other_text[is.na(other_text) | other_text %in% c("", "0", "-", "n/a", "N/A", "none", "None")] <- NA_character_
 
 clean_data$training_fields_list <- lapply(
   seq_len(nrow(training_fields_bitmap)), function(i) {
@@ -277,7 +309,9 @@ clean_data$salary_raw <- clean_data$salary_midpoint
 # Convert the whole salary interval to a 100% full-time-equivalent (FTE).
 # Example: declared 80-89,999 CHF at 50% -> approximately 160-180k CHF FTE.
 # Open-ended bounds stay NA, while the midpoint estimate is still available.
-valid_rate <- !is.na(clean_data$plrate) & clean_data$plrate > 0
+# Only respondents with a work rate >= SALARY_MIN_WORKRATE (50%) get an FTE salary:
+# dividing by a very small rate would multiply the imprecision of the band.
+valid_rate <- !is.na(clean_data$plrate) & clean_data$plrate >= SALARY_MIN_WORKRATE
 
 clean_data$salary_fte_low <- ifelse(
   valid_rate & !is.na(clean_data$salary_band_low),
@@ -296,6 +330,13 @@ clean_data$salary_fte_high <- ifelse(
   clean_data$salary_band_high / clean_data$plrate * 100,
   NA_real_
 )
+
+# Open-ended top band (">= 200 000"): the true amount is unknown, so scaling it
+# by the work rate is meaningless. It is kept at its working values (200k /
+# 205k), i.e. it stays ">= 200 000" in FTE too.
+is_top_band <- valid_rate & salary_code %in% "AO16"
+clean_data$salary_fte_low[is_top_band] <- clean_data$salary_band_low[is_top_band]
+clean_data$salary_fte_mid[is_top_band] <- clean_data$salary_midpoint[is_top_band]
 
 # Backward-compatible alias: all existing salary plots/tables now use the
 # midpoint-based FTE estimate without requiring changes elsewhere.
@@ -385,6 +426,62 @@ clean_data$exp_group <- cut(
 #   sur la sous-population "SSS members" comme demandé au protocole §5)
 clean_data$is_sss_member <- !is.na(clean_data$sssmember) &
   clean_data$sssmember != "Not a member"
+
+####################################################################
+#  Éligibilité (protocole §3 et §4.3.2)
+####################################################################
+# Inclusion (at least one of):
+#   (a) currently employed (full-time, part-time or self-employed) in a
+#       statistics-related role, or previously held such a role and is now
+#       retired or temporarily unemployed;
+#   (b) currently employed in a role that directly involves the use of statistics;
+#   (c) currently enrolled in a PhD programme in statistics or a related field.
+# Exclusion: full-time students who are not employed in a statistics-related position.
+#
+# The questionnaire is only addressed to people working with statistics, so the
+# role itself cannot be re-checked from the data. What can be checked is the
+# current status:
+#   - employed / self-employed / retired / unemployed / other non-student status
+#     -> included (retired and unemployed respondents describe their previous role);
+#   - full-time student without a job -> excluded (a PhD student enrolled in a
+#     statistics programme, criterion c, cannot be identified from the data and
+#     would have to be re-included by hand);
+#   - missing status -> none of the criteria can be established -> excluded.
+# Work outside Switzerland is NOT an exclusion criterion by itself (criterion b).
+is_student    <- clean_data$job_status %in% "Student"
+status_missing <- is.na(clean_data$job_status)
+eligible <- !is_student & !status_missing
+
+# Sample flow (Table 2 of the publication; written by 09_publication_extras.R)
+sample_flow <- data.frame(
+  Step = c("Participants who started the questionnaire",
+           "Questionnaires with all fields answered",
+           "Complete questionnaires used as the starting sample",
+           "\u2013 full-time students not employed in a statistics-related position",
+           "\u2013 none of the inclusion criteria met (employment status missing)",
+           "Eligible respondents (analysis sample)",
+           "of which with a salary and a work rate of at least 50%"),
+  n = c(N_STARTED,
+        N_COMPLETE,
+        nrow(clean_data),
+        sum(is_student),
+        sum(status_missing & !is_student),
+        sum(eligible),
+        sum(eligible & !is.na(clean_data$salary_fte_mid))),
+  stringsAsFactors = FALSE
+)
+message("✔ Éligibilité (protocole) : ", sum(eligible), " / ", nrow(clean_data),
+        " répondants retenus (", sum(!eligible), " exclus)")
+if (nrow(clean_data) > 20 && sum(eligible) < 0.5 * nrow(clean_data)) {
+  warning("Plus de la moitié des répondants sont exclus (", sum(eligible), " / ",
+          nrow(clean_data), "). Cela vient en général d'un problème de format ",
+          "d'export plutôt que des critères d'éligibilité — à vérifier.")
+}
+
+# Excluded records are kept in a separate object for transparency (protocol §4.3.2)
+excluded_data <- clean_data[!eligible, , drop = FALSE]
+clean_data <- clean_data[eligible, , drop = FALSE]
+rownames(clean_data) <- NULL
 
 ####################################################################
 #  Export CSV intermédiaire (optionnel)
